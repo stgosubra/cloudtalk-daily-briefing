@@ -1,6 +1,6 @@
 # CloudTalk Daily Briefing
 
-A personal daily briefing dashboard for CloudTalk AEs built on top of [Claude Cowork](https://claude.ai).
+A personal daily briefing dashboard for CloudTalk built on top of [Claude Cowork](https://claude.ai).
 
 Pulls today's prospect calls from Google Calendar, joins them with live HubSpot data (lead status, seats, country, phone), enriches each card with the latest Gmail thread signal, and renders a hot-reloading React dashboard at `localhost:5173`. Auto-refreshes every weekday morning via a scheduled task.
 
@@ -86,4 +86,4 @@ refresh my daily briefing
 
 ## Author
 
-Santiago Subra · CloudTalk AE team
+Santiago Subra 

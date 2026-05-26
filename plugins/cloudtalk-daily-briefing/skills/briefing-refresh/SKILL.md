@@ -263,3 +263,93 @@ Use `mcp__6bc81bae-2153-46e9-9eda-e832bf000b3e__list_events` twice - once per we
 - Phone numbers: strip internal whitespace (`"+447907 975650"` -> `"+447907975650"`)
 - companyBrief + challengerInsight + qualifierQuestions: generate only for NEW cards. Preserve existing values for carry-over cards byte-for-byte - never regenerate them
 - When run by the scheduled task, the user is not present - execute autonomously and note decisions in the summary
+
+## Step 15 - Sync GitHub repo after every confirmed change
+
+**This step is mandatory. Run it every time App.jsx is written, or any skill file is modified.**
+
+After the atomic save (Step 13) confirms a clean build, generate a fresh `App.jsx.template` and provide the git push commands.
+
+### Generate the template
+
+Run this Python block:
+
+```python
+import re, shutil
+
+projectPath = "<projectPath>"  # from config.json
+
+with open(f"{projectPath}/src/App.jsx") as f:
+    content = f.read()
+
+# OWNER placeholders
+content = content.replace('name: "Santiago Subra"', 'name: "YOUR_NAME"')
+content = content.replace('ownerId: 87191703', 'ownerId: 0')
+content = content.replace('portalId: 6195055', 'portalId: 0')
+content = re.sub(r'email: "[^"]+@cloudtalk\.io",\n\};', 'email: "your.email@cloudtalk.io",\n};', content)
+
+# Generic header
+content = re.sub(r'const TODAY_LABEL = "[^"]*";', 'const TODAY_LABEL = "Monday, 5 Jan 2026";', content)
+content = re.sub(r'const REFRESHED_AT = "[^"]*";', "const REFRESHED_AT = \"Not yet refreshed - run 'refresh my daily briefing' in Cowork\";", content)
+content = re.sub(r'const TODAY_ISO = "[^"]*";', 'const TODAY_ISO = "2026-01-05";', content)
+
+# Generic WEEK_DAYS
+content = re.sub(r'const WEEK_DAYS = \[[\s\S]*?\];',
+  'const WEEK_DAYS = [\n  { iso: "2026-01-05", name: "Monday",    short: "Mon", dayNum: "5",  monthShort: "Jan" },\n  { iso: "2026-01-06", name: "Tuesday",   short: "Tue", dayNum: "6",  monthShort: "Jan" },\n  { iso: "2026-01-07", name: "Wednesday", short: "Wed", dayNum: "7",  monthShort: "Jan" },\n  { iso: "2026-01-08", name: "Thursday",  short: "Thu", dayNum: "8",  monthShort: "Jan" },\n  { iso: "2026-01-09", name: "Friday",    short: "Fri", dayNum: "9",  monthShort: "Jan" },\n];', content)
+
+# Empty all PROSPECTS arrays
+for arr in ['MONDAY_PROSPECTS','TUESDAY_PROSPECTS','WEDNESDAY_PROSPECTS','THURSDAY_PROSPECTS','FRIDAY_PROSPECTS']:
+    content = re.sub(rf'(const {arr} = )\[[\s\S]*?\n\];', r'\1[];', content)
+content = re.sub(r'(const LAST_WEEK_PROSPECTS = )\[[\s\S]*?\];', r'\1[];', content)
+content = re.sub(r'(const TWO_WEEKS_AGO_PROSPECTS = )\[[\s\S]*?\];', r'\1[];', content)
+
+# Update map keys to match generic WEEK_DAYS
+for old, new in [('2026-05-25','2026-01-05'),('2026-05-26','2026-01-06'),
+                 ('2026-05-27','2026-01-07'),('2026-05-28','2026-01-08'),('2026-05-29','2026-01-09')]:
+    content = content.replace(f'"{old}":', f'"{new}":')
+
+# Clean week comment
+content = content.replace(
+    '// Week of 25 May 2026 - Santiago back from OOO Mon AM. Active pipeline all 5 days. Shadda rescheduled Mon→Tue 15:30.',
+    '// Current week - populated by briefing-refresh skill each morning'
+)
+
+out = f"{projectPath}/App.jsx.template.new"
+with open(out, 'w') as f:
+    f.write(content)
+print(f"Written: {out}")
+```
+
+### Syntax check the template
+
+```bash
+npx esbuild@0.24.0 <projectPath>/App.jsx.template.new --loader:.jsx=jsx --outfile=/tmp/tcheck.js
+```
+
+If it fails, fix and retry before proceeding.
+
+### Provide these terminal commands to Santiago
+
+Show this block verbatim in the summary so he can run it:
+
+```bash
+cp ~/Desktop/daily-briefing/App.jsx.template.new ~/Desktop/cloudtalk-daily-briefing-repo/plugins/cloudtalk-daily-briefing/assets/App.jsx.template
+cd ~/Desktop/cloudtalk-daily-briefing-repo
+git add .
+git commit -m "Auto-sync: daily briefing update $(date '+%d %b %Y')"
+git push origin main
+```
+
+If any SKILL.md files were also updated during this session, include them in the same commit:
+
+```bash
+cp ~/Desktop/daily-briefing/briefing-refresh-SKILL-updated.md ~/Desktop/cloudtalk-daily-briefing-repo/plugins/cloudtalk-daily-briefing/skills/briefing-refresh/SKILL.md
+```
+
+### What NOT to commit
+
+- `src/App.jsx` - contains live prospect data and personal HubSpot IDs
+- `config.json` - personal credentials
+- `node_modules/`
+
+These are covered by `.gitignore` and must stay local.

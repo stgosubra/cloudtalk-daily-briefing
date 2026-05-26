@@ -207,6 +207,31 @@ The `ProspectCard` component contains four intentional CSS properties that preve
 
 These were introduced 25 May 2026 to fix qualifier question text overflowing the card bounds on the displayed dashboard.
 
+
+## Step 12b - Pull W-1 and W-2 prospects for Re-engage tab
+
+Run this step every time, after Step 12. It populates `LAST_WEEK_PROSPECTS` and `TWO_WEEKS_AGO_PROSPECTS` in App.jsx.
+
+**Compute the date ranges:**
+- W-1: Mon-Fri of last calendar week (7-3 days ago relative to today's Mon)
+- W-2: Mon-Fri of the week before that (14-10 days ago)
+
+Use `mcp__6bc81bae-2153-46e9-9eda-e832bf000b3e__list_events` twice - once per week window (Mon 00:00 to Fri 23:59 local time). `pageSize: 50` each.
+
+**Apply the same prospect filter as Step 4** (external attendees, non-cloudtalk domain, meeting title signals). Skip internal/personal events.
+
+**For each historical prospect event:**
+1. Run HubSpot lookup (same as Step 5) - batch all new emails together
+2. Run Gmail thread lookup (same as Step 7)
+3. Build the prospect object with the same field shape as current-week cards, PLUS add:
+   `meetingIso: "YYYY-MM-DD"` // the calendar date of the meeting
+4. **Filter out**: any card where `hs_lead_status === "Qualified"` or `hs_lead_status === null`
+5. **Keep**: NEW, OPEN, IN_PROGRESS, ATTEMPTED_TO_CONTACT, Unable_to_Contact
+
+**Do NOT generate** `companyBrief`, `challengerInsight`, or `qualifierQuestions` for historical cards. Omit those fields entirely - the Re-engage tab does not render them.
+
+**Carry-over logic:** Mid-week runs preserve both arrays from the Step 2 snapshot unless the `meetingIso` dates are no longer within W-1 or W-2 from today's perspective. On the first run of a new week (Monday), W-1 shifts to W-2 and a fresh W-1 pull replaces it.
+
 ## Step 13 - Atomic save with syntax check
 
 1. Write the candidate to `/tmp/App.jsx.candidate`

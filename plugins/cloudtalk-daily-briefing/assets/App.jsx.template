@@ -33,15 +33,15 @@ const HS = (id) => `https://app.hubspot.com/contacts/${OWNER.portalId}/record/0-
 
 // === LIGHT THEME PALETTE ===
 const C = {
-  bg: "#F1F5F9",
+  bg: "#F4F2EF",           // warm off-white — not cold slate
   surface: "#FFFFFF",
-  surfaceAlt: "#F8FAFC",
-  border: "#E2E8F0",
-  borderHover: "#CBD5E1",
-  text: "#0F172A",
-  textMid: "#475569",
-  textMuted: "#64748B",
-  textHint: "#94A3B8",
+  surfaceAlt: "#FAF9F7",   // warmer alt surface
+  border: "#E6E2DC",       // warm gray border
+  borderHover: "#CAC5BE",  // warm hover border
+  text: "#1A1714",         // warm near-black
+  textMid: "#54504B",      // warm medium
+  textMuted: "#7A7570",    // warm muted
+  textHint: "#A8A49F",     // warm hint
   blue: "#4F46E5",   blueBg: "#EEF2FF",   blueBorder: "#C7D2FE",
   emerald: "#059669", emeraldBg: "#ECFDF5", emeraldBorder: "#A7F3D0",
   meet: "#34A853",   meetBg: "#E6F4EA",   meetBorder: "#A8DAB5",
@@ -202,7 +202,6 @@ const FRIDAY_PROSPECTS = [];
 
 // W-1 and W-2 prospects for Re-engage tab - auto-populated by briefing-refresh skill
 // Each prospect has same shape as current-week entries PLUS meetingIso: "YYYY-MM-DD"
-// Filter applied: leadStatus !== "Qualified" && leadStatus !== null
 const LAST_WEEK_PROSPECTS = [];     // Mon-Fri of week -1
 const TWO_WEEKS_AGO_PROSPECTS = []; // Mon-Fri of week -2
 
@@ -392,9 +391,9 @@ function HSPanel({ p, notes, setNotes }) {
   const checkedCount = Object.values(meddpiccState).filter(Boolean).length;
   const qualifierItems = (p.qualifierQuestions && p.qualifierQuestions.length > 0) ? p.qualifierQuestions : MEDDPICC_ITEMS;
   return (
-    <div style={{ marginTop: 10, padding: "12px 14px", background: C.surfaceAlt, borderRadius: 6, border: `1px solid ${C.border}`, display: "flex", flexWrap: "wrap", gap: 18 }}>
+    <div style={{ marginTop: 10, padding: "13px 15px", background: C.surfaceAlt, borderRadius: 9, border: `1px solid ${C.border}`, display: "flex", flexWrap: "wrap", gap: 18 }}>
       <div style={{ minWidth: 0, flex: (briefOpen || qualifyOpen) ? "1 1 100%" : "0 0 auto" }}>
-        <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>Role & company</div>
+        <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.6, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>Role & company</div>
         {p.jobtitle ? (
           <div style={{ fontSize: 13, fontWeight: 600, color: C.text, lineHeight: 1.3 }}>{p.jobtitle}</div>
         ) : (
@@ -423,12 +422,12 @@ function HSPanel({ p, notes, setNotes }) {
           </div>
         )}
         {briefOpen && (
-          <div style={{ marginTop: 8, padding: "8px 10px", background: C.purpleBg, border: `1px solid ${C.purpleBorder}`, borderRadius: 5, fontSize: 11, lineHeight: 1.5, color: C.text, whiteSpace: "pre-line" }}>
+          <div style={{ marginTop: 8, padding: "10px 12px", background: C.purpleBg, border: `1px solid ${C.purpleBorder}`, borderRadius: 8, fontSize: 11, lineHeight: 1.6, color: C.text, whiteSpace: "pre-line" }}>
             {p.companyBrief || <span style={{ fontStyle: "italic", color: C.textHint }}>Brief not generated yet - will be added in next refresh.</span>}
           </div>
         )}
         {qualifyOpen && (
-          <div style={{ marginTop: 8, padding: "10px 12px", background: C.emeraldBg, border: `1px solid ${C.emeraldBorder}`, borderRadius: 5, fontSize: 11, lineHeight: 1.45, color: C.text, overflow: "hidden", wordBreak: "break-word" }}>
+          <div style={{ marginTop: 8, padding: "11px 13px", background: C.emeraldBg, border: `1px solid ${C.emeraldBorder}`, borderRadius: 8, fontSize: 11, lineHeight: 1.5, color: C.text, overflow: "hidden", wordBreak: "break-word" }}>
             {p.challengerInsight ? (
               <div style={{ marginBottom: 10, padding: "6px 8px", background: C.surface, border: `1px solid ${C.emeraldBorder}`, borderRadius: 4 }}>
                 <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.emerald, textTransform: "uppercase", marginBottom: 3, fontWeight: 600 }}>⚡ Challenger insight - lead with this</div>
@@ -457,19 +456,19 @@ function HSPanel({ p, notes, setNotes }) {
       </div>
       {p.seats && (
         <div style={{ minWidth: 90 }}>
-          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>Seats (agg.)</div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.6, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>Seats (agg.)</div>
           <div style={{ fontSize: 18, fontWeight: 700, color: C.cyan, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{p.seats}</div>
         </div>
       )}
       {p.leadSource && (
         <div style={{ minWidth: 110 }}>
-          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>Lead source</div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.6, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>Lead source</div>
           <span style={{ fontFamily: FONT_MONO, fontSize: 10, background: C.purpleBg, color: C.purple, border: `1px solid ${C.purpleBorder}`, borderRadius: 4, padding: "2px 7px" }}>{p.leadSource}</span>
         </div>
       )}
       {cd && (
         <div style={{ minWidth: 80 }}>
-          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>Market</div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.6, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>Market</div>
           <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <span style={{ fontSize: 16 }}>{cd.flag}</span>
             <span style={{ fontFamily: FONT_MONO, fontSize: 10, fontWeight: 500, color: C.cyan, background: C.cyanBg, border: `1px solid ${C.cyanBorder}`, padding: "1px 6px", borderRadius: 4 }}>{cd.region}</span>
@@ -478,13 +477,13 @@ function HSPanel({ p, notes, setNotes }) {
       )}
       {sd && (
         <div style={{ minWidth: 110 }}>
-          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>HS status</div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.6, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>HS status</div>
           <span style={{ fontFamily: FONT_MONO, fontSize: 10, background: sd.bg, color: sd.color, border: `1px solid ${sd.border}`, borderRadius: 10, padding: "2px 8px" }}>{sd.label}</span>
         </div>
       )}
       {p.phone && (
         <div style={{ minWidth: 130 }}>
-          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>Phone</div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.6, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>Phone</div>
           <a href={`tel:${p.phone}`} style={{ fontFamily: FONT_MONO, fontSize: 11, color: C.blue, textDecoration: "none" }}>{p.phone}</a>
         </div>
       )}
@@ -508,7 +507,7 @@ function NotesPanel({ id, notes, setNotes }) {
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         placeholder="Quick note..."
-        style={{ flex: 1, fontFamily: FONT_MONO, fontSize: 11, padding: "8px 10px", borderRadius: 4, border: `1px solid ${focused ? C.blue : C.border}`, background: C.surfaceAlt, color: C.text, outline: "none", resize: "vertical", minHeight: 96, lineHeight: 1.5, transition: "border-color 0.12s" }}
+        style={{ flex: 1, fontFamily: FONT_MONO, fontSize: 11, padding: "9px 11px", borderRadius: 7, border: `1px solid ${focused ? C.blue : C.border}`, background: C.surfaceAlt, color: C.text, outline: "none", resize: "vertical", minHeight: 96, lineHeight: 1.5, transition: "border-color 0.12s" }}
       />
     </div>
   );
@@ -545,7 +544,7 @@ function ProspectCard({ m, notes, setNotes, onOpenNotes }) {
   const gmailComposeUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(m.email)}&su=${encodeURIComponent(gmailSubject)}&body=${encodeURIComponent(gmailBody)}`;
   return (
     <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ padding: "14px 16px", background: C.surface, border: `1px solid ${hov ? C.borderHover : C.border}`, borderLeft: `3px solid ${accent}`, borderRadius: 6, marginBottom: 8, transition: "all 0.14s", boxShadow: hov ? "0 1px 3px rgba(15,23,42,0.06)" : "none" }}>
+      style={{ padding: "16px 18px", background: C.surface, border: `1px solid ${hov ? C.borderHover : C.border}`, borderLeft: `2px solid ${accent}`, borderRadius: 10, marginBottom: 10, transition: "all 0.14s", boxShadow: hov ? "0 2px 8px rgba(26,23,20,0.08)" : "0 1px 2px rgba(26,23,20,0.04)" }}>
       <div style={{ display: "grid", gridTemplateColumns: "52px 1fr 200px", gap: 14 }}>
         <div style={{ paddingTop: 2 }}>
           <div style={{ fontSize: 16, fontWeight: 700, color: C.text, lineHeight: 1, marginBottom: 4, fontVariantNumeric: "tabular-nums" }}>{m.start}</div>
@@ -586,9 +585,9 @@ function ProspectCard({ m, notes, setNotes, onOpenNotes }) {
             <CopyEmail email={m.email} />
           </div>
           {m.lastEmail && (
-            <div style={{ marginBottom: 10, padding: "6px 9px", background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 4 }}>
+            <div style={{ marginBottom: 10, padding: "8px 10px", background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 7 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2, flexWrap: "wrap" }}>
-                <span style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.textHint, textTransform: "uppercase" }}>Last email</span>
+                <span style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.6, color: C.textHint, textTransform: "uppercase" }}>Last email</span>
                 <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textMuted }}>{m.lastEmail.date}</span>
                 {m.lastEmail.threadUrl && (
                   <a href={m.lastEmail.threadUrl} target="_blank" rel="noreferrer"
@@ -612,11 +611,11 @@ function ProspectCard({ m, notes, setNotes, onOpenNotes }) {
             {m.meetLink && <LinkBtn href={m.meetLink} label="Join Meet →" color={C.meet} bg={C.meetBg} border={C.meetBorder} solid />}
             <button onClick={() => onOpenNotes && onOpenNotes(m)}
               title="Open Live Notes - capture transcript + AI insights from the call"
-              style={{ fontFamily: FONT_SANS, fontSize: 11, fontWeight: 500, padding: "5px 12px", borderRadius: 5, border: `1px solid ${C.purple}`, background: C.purple, color: "#FFF", cursor: "pointer", transition: "all 0.12s", whiteSpace: "nowrap" }}>
+              style={{ fontFamily: FONT_SANS, fontSize: 11, fontWeight: 500, padding: "5px 13px", borderRadius: 7, border: `1px solid ${C.purple}`, background: C.purple, color: "#FFF", cursor: "pointer", transition: "all 0.12s", whiteSpace: "nowrap" }}>
               {insightCount > 0 ? `📝 Live Notes · ${insightCount}` : "📝 Live Notes"}
             </button>
             <button onClick={() => setExp((e) => !e)}
-              style={{ fontFamily: FONT_MONO, fontSize: 9, padding: "3px 9px", borderRadius: 4, border: `1px solid ${C.border}`, background: C.surface, color: C.textMuted, cursor: "pointer", transition: "all 0.12s" }}>
+              style={{ fontFamily: FONT_MONO, fontSize: 9, padding: "3px 10px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.surface, color: C.textMuted, cursor: "pointer", transition: "all 0.12s", letterSpacing: 0.3 }}>
               {exp ? "▲ Less" : "▼ Details"}
             </button>
           </div>
@@ -636,7 +635,7 @@ function WeekCard({ m }) {
   const opacity = m.canceled ? 0.55 : 1;
   return (
     <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ padding: "9px 10px", background: C.surface, border: `1px solid ${hov ? C.borderHover : C.border}`, borderLeft: `3px solid ${accent}`, borderRadius: 5, marginBottom: 6, transition: "all 0.14s", opacity, boxShadow: hov ? "0 1px 3px rgba(15,23,42,0.06)" : "none" }}>
+      style={{ padding: "10px 12px", background: C.surface, border: `1px solid ${hov ? C.borderHover : C.border}`, borderLeft: `2px solid ${accent}`, borderRadius: 8, marginBottom: 6, transition: "all 0.14s", opacity, boxShadow: hov ? "0 2px 6px rgba(26,23,20,0.07)" : "0 1px 2px rgba(26,23,20,0.03)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6, marginBottom: 3 }}>
         <span style={{ fontFamily: FONT_MONO, fontSize: 11, fontWeight: 600, color: C.text, fontVariantNumeric: "tabular-nums" }}>{m.start}</span>
         <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
@@ -670,7 +669,7 @@ function OtherCard({ ev }) {
   const accent = palMap[ev.color] || C.purple;
   return (
     <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ display: "grid", gridTemplateColumns: "52px 1fr", gap: 14, padding: "10px 16px", background: C.surface, border: `1px solid ${hov ? C.borderHover : C.border}`, borderLeft: `3px solid ${accent}`, borderRadius: 6, marginBottom: 8, transition: "all 0.14s" }}>
+      style={{ display: "grid", gridTemplateColumns: "52px 1fr", gap: 14, padding: "11px 16px", background: C.surface, border: `1px solid ${hov ? C.borderHover : C.border}`, borderLeft: `2px solid ${accent}`, borderRadius: 10, marginBottom: 8, transition: "all 0.14s", boxShadow: hov ? "0 2px 6px rgba(26,23,20,0.07)" : "0 1px 2px rgba(26,23,20,0.03)" }}>
       <div style={{ paddingTop: 2 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: C.text, lineHeight: 1, marginBottom: 4, fontVariantNumeric: "tabular-nums" }}>{ev.start}</div>
         <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>{ev.end}</div>
@@ -719,7 +718,7 @@ function Progress({ prospects }) {
   return (
     <div style={{ marginBottom: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-        <span style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", color: C.textHint }}>Discovery calls</span>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 0.7, textTransform: "uppercase", color: C.textHint }}>Discovery calls</span>
         <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textMuted, fontVariantNumeric: "tabular-nums" }}>{done}/{active.length} done</span>
       </div>
       <div style={{ height: 4, background: C.border, overflow: "hidden", borderRadius: 2 }}>
@@ -746,7 +745,7 @@ function Timeline({ prospects, otherEvents }) {
   const others = otherEvents.map((e) => ({ name: e.name.split(" ")[0], start: e.start, end: e.end, color: palMap[e.color] || C.purple }));
   return (
     <div style={{ marginBottom: 24, background: C.surface, border: `1px solid ${C.border}`, padding: "14px 16px", borderRadius: 6 }}>
-      <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", color: C.textHint, marginBottom: 10 }}>Day timeline</div>
+      <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 0.7, textTransform: "uppercase", color: C.textHint, marginBottom: 10 }}>Day timeline</div>
       <div style={{ position: "relative", height: 48 }}>
         {hours.map((h) => {
           const p = ((h * 60 - DAY_START) / DAY_SPAN) * 100;
@@ -821,7 +820,7 @@ function OpenSlots({ prospects, otherEvents }) {
   return (
     <div style={{ marginBottom: 24, background: C.surface, border: `1px solid ${C.border}`, padding: "14px 16px", borderRadius: 6 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10, flexWrap: "wrap", gap: 6 }}>
-        <span style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", color: C.textHint }}>Open booking slots · 09:00-18:00</span>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 0.7, textTransform: "uppercase", color: C.textHint }}>Open booking slots · 09:00-18:00</span>
         <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.blue, fontVariantNumeric: "tabular-nums" }}>{upcoming.length} bookable</span>
       </div>
       {upcoming.length === 0 ? (
@@ -926,7 +925,7 @@ function DayStats({ prospects }) {
   ];
   return (
     <div style={{ marginTop: 28, padding: "16px 18px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6 }}>
-      <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", color: C.textHint, marginBottom: 14 }}>Day stats</div>
+      <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 0.7, textTransform: "uppercase", color: C.textHint, marginBottom: 14 }}>Day stats</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 24 }}>
         {stats.map((s, i) => (
           <div key={i} style={{ textAlign: "center", minWidth: 55 }}>
@@ -1274,7 +1273,7 @@ Return ONLY the JSON array, no prose, no markdown fences.`;
             )}
           </div>
           <div style={{ borderLeft: `1px solid ${C.border}`, padding: "14px 16px", overflowY: "auto", background: C.surface }}>
-            <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", color: C.textHint, marginBottom: 10 }}>AI Insights - {insights.length}</div>
+            <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 0.7, textTransform: "uppercase", color: C.textHint, marginBottom: 10 }}>AI Insights - {insights.length}</div>
             {insights.length === 0 && <div style={{ fontSize: 12, color: C.textHint, lineHeight: 1.5 }}>Insights appear every 20s. Pain, qualifiers, stack, competition, objections and buying signals get flagged automatically.</div>}
             {insights.slice().reverse().map((i, k) => {
               const s = INSIGHT_KIND_STYLE[i.kind] || INSIGHT_KIND_STYLE.key;
@@ -1320,7 +1319,7 @@ function ViewToggle({ mode, setMode }) {
     );
   };
   return (
-    <div style={{ display: "inline-flex", padding: 3, background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 8, gap: 2 }}>
+    <div style={{ display: "inline-flex", padding: 3, background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 10, gap: 2 }}>
       {tab("day",      "Day",       "📅")}
       {tab("week",     "Week",      "🗓️")}
       {tab("reengage", "Re-engage", "↩")}
@@ -1339,19 +1338,19 @@ function DayNavigator({ selectedDayIso, setSelectedDayIso }) {
           <button key={d.iso} onClick={() => setSelectedDayIso(d.iso)}
             style={{
               fontFamily: FONT_SANS,
-              padding: "8px 14px",
-              borderRadius: 8,
+              padding: "9px 15px",
+              borderRadius: 10,
               border: `1px solid ${active ? C.blue : C.border}`,
               background: active ? C.blue : C.surface,
               color: active ? "#FFF" : C.text,
               cursor: "pointer",
               transition: "all 0.14s",
+              boxShadow: active ? "0 1px 4px rgba(79,70,229,0.22)" : "0 1px 2px rgba(26,23,20,0.04)",
               display: "flex",
               flexDirection: "column",
               alignItems: "flex-start",
               gap: 2,
               minWidth: 76,
-              boxShadow: active ? "0 2px 6px rgba(79,70,229,0.25)" : "none",
             }}>
             <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 600, opacity: active ? 1 : 0.85 }}>
               {d.short}
@@ -1374,7 +1373,7 @@ function WeekDayColumn({ day, prospects, isToday }) {
       <div style={{ padding: "10px 12px", background: isToday ? C.blueBg : C.surfaceAlt, border: `1px solid ${isToday ? C.blueBorder : C.border}`, borderRadius: "6px 6px 0 0", borderBottom: "none" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: isToday ? C.blue : C.text }}>{day.name}</span>
-          {isToday && <span style={{ fontFamily: FONT_MONO, fontSize: 8, fontWeight: 700, background: C.blue, color: "#FFF", padding: "1px 6px", borderRadius: 4, letterSpacing: 1 }}>TODAY</span>}
+          {isToday && <span style={{ fontFamily: FONT_MONO, fontSize: 8, fontWeight: 700, background: C.blue, color: "#FFF", padding: "1px 6px", borderRadius: 6, letterSpacing: 0.6 }}>TODAY</span>}
         </div>
         <div style={{ fontFamily: FONT_MONO, fontSize: 10, color: isToday ? C.blue : C.textMuted, marginBottom: 6 }}>
           {day.dayNum} {day.monthShort}
@@ -1450,7 +1449,7 @@ function ReEngageCard({ m, doneSet, onToggleDone }) {
     <div style={{
       background: isDone ? C.surfaceAlt : C.surface,
       border: `1px solid ${isDone ? C.border : (hov ? C.borderHover : C.border)}`,
-      borderRadius: 8, padding: "10px 14px", marginBottom: 6,
+      borderRadius: 10, padding: "11px 14px", marginBottom: 7,
       opacity: isDone ? 0.55 : 1, transition: "all 0.15s",
       display: "flex", alignItems: "center", gap: 12,
     }}
@@ -1541,7 +1540,7 @@ function ReEngageTab() {
     const pending = arr.filter(m => !done.has(m.email)).length;
     return (
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, marginTop: 4 }}>
-        <span style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", color: C.textHint }}>{label}{dateRange ? " · " + dateRange : ""}</span>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 0.7, textTransform: "uppercase", color: C.textHint }}>{label}{dateRange ? " · " + dateRange : ""}</span>
         <span style={{ fontFamily: FONT_MONO, fontSize: 9, padding: "1px 9px", borderRadius: 8, background: C.blueBg, color: C.blue, border: `1px solid ${C.blueBorder}` }}>{pending} to reach out</span>
       </div>
     );
@@ -1642,7 +1641,7 @@ export default function DailyBriefing() {
               </>
             )}
 
-            <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 2, textTransform: "uppercase", color: C.textHint, marginBottom: 12 }}>Discovery calls</div>
+            <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 0.8, textTransform: "uppercase", color: C.textHint, marginBottom: 12 }}>Discovery calls</div>
             {active.length === 0 ? (
               <div style={{ padding: "24px 16px", background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 6, fontFamily: FONT_MONO, fontSize: 11, color: C.textHint, textAlign: "center" }}>No discovery calls scheduled.</div>
             ) : (
@@ -1651,7 +1650,7 @@ export default function DailyBriefing() {
 
             {other.length > 0 && (
               <div style={{ marginTop: 28 }}>
-                <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 2, textTransform: "uppercase", color: C.textHint, marginBottom: 12 }}>Rest of day</div>
+                <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 0.8, textTransform: "uppercase", color: C.textHint, marginBottom: 12 }}>Rest of day</div>
                 {other.map((ev, i) => <OtherCard key={i} ev={ev} />)}
               </div>
             )}

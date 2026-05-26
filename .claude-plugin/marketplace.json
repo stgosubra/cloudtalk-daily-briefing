@@ -1,0 +1,15 @@
+{
+  "name": "cloudtalk-daily-briefing",
+  "owner": {
+    "name": "Santiago Subra",
+    "email": "santiago.subra@cloudtalk.io"
+  },
+  "description": "CloudTalk Daily Briefing — personal prospect dashboard for CloudTalk AEs. Pulls today's calls from Google Calendar, joins them with HubSpot data, and renders a live React dashboard that auto-refreshes every weekday morning.",
+  "plugins": [
+    {
+      "name": "cloudtalk-daily-briefing",
+      "source": "./plugins/cloudtalk-daily-briefing",
+      "description": "Daily briefing dashboard for CloudTalk AEs"
+    }
+  ]
+}

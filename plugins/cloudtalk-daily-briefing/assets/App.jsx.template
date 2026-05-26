@@ -1,0 +1,642 @@
+import { useState, useEffect, useRef } from "react";
+import config from "../config.json";
+
+const OWNER = {
+  name: config.owner.name,
+  ownerId: config.owner.ownerId,
+  portalId: config.owner.portalId,
+  email: config.owner.email,
+};
+const FIRST_NAME = OWNER.name.split(" ")[0];
+const TODAY_LABEL = "Run the briefing-refresh skill to populate";
+const REFRESHED_AT = "Awaiting first refresh - HubSpot + Calendar live pull";
+
+const WORK_START = 9 * 60;
+const WORK_END = 18 * 60;
+const MIN_SLOT = 15;
+const NOTIFY_LEAD = 5;
+
+const toMin = (t) => {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+};
+const fromMin = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+const HS = (id) => `https://app.hubspot.com/contacts/${OWNER.portalId}/record/0-1/${id}`;
+
+const C = {
+  bg: "#1A1A1A",
+  surface: "#242424",
+  surfaceAlt: "#1F1F1F",
+  border: "#333333",
+  borderHover: "#404040",
+  text: "#F5F5F5",
+  textMid: "#D4D4D4",
+  textMuted: "#A3A3A3",
+  textHint: "#737373",
+  lime: "#A3E635", limeBg: "rgba(163, 230, 53, 0.12)", limeBorder: "rgba(163, 230, 53, 0.3)",
+  emerald: "#34D399", emeraldBg: "rgba(52, 211, 153, 0.12)", emeraldBorder: "rgba(52, 211, 153, 0.3)",
+  purple: "#C084FC", purpleBg: "rgba(192, 132, 252, 0.12)", purpleBorder: "rgba(192, 132, 252, 0.3)",
+  amber: "#FBBF24", amberBg: "rgba(251, 191, 36, 0.12)", amberBorder: "rgba(251, 191, 36, 0.3)",
+  cyan: "#67E8F9", cyanBg: "rgba(103, 232, 249, 0.12)", cyanBorder: "rgba(103, 232, 249, 0.3)",
+  red: "#F87171", redBg: "rgba(248, 113, 113, 0.12)", redBorder: "rgba(248, 113, 113, 0.3)",
+};
+
+const FONT_SANS = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+const FONT_MONO = "'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace";
+
+const COUNTRY_MAP = {
+  "france": { flag: "🇫🇷", region: "FR" },
+  "belgium": { flag: "🇧🇪", region: "FR" },
+  "switzerland": { flag: "🇨🇭", region: "FR" },
+  "netherlands": { flag: "🇳🇱", region: "NL" },
+  "germany": { flag: "🇩🇪", region: "DACH" },
+  "austria": { flag: "🇦🇹", region: "DACH" },
+  "hungary": { flag: "🇭🇺", region: "DACH" },
+  "sweden": { flag: "🇸🇪", region: "NORDIC" },
+  "norway": { flag: "🇳🇴", region: "NORDIC" },
+  "denmark": { flag: "🇩🇰", region: "NORDIC" },
+  "finland": { flag: "🇫🇮", region: "NORDIC" },
+  "united kingdom": { flag: "🇬🇧", region: "EN" },
+  "ireland": { flag: "🇮🇪", region: "EN" },
+  "spain": { flag: "🇪🇸", region: "ES" },
+  "portugal": { flag: "🇵🇹", region: "ES" },
+  "italy": { flag: "🇮🇹", region: "IT" },
+  "morocco": { flag: "🇲🇦", region: "MEA" },
+  "algeria": { flag: "🇩🇿", region: "MEA" },
+  "egypt": { flag: "🇪🇬", region: "MEA" },
+  "united arab emirates": { flag: "🇦🇪", region: "MEA" },
+  "saudi arabia": { flag: "🇸🇦", region: "MEA" },
+  "pakistan": { flag: "🇵🇰", region: "MEA" },
+  "south africa": { flag: "🇿🇦", region: "APAC" },
+  "india": { flag: "🇮🇳", region: "APAC" },
+  "australia": { flag: "🇦🇺", region: "APAC" },
+  "lithuania": { flag: "🇱🇹", region: "EU" },
+  "latvia": { flag: "🇱🇻", region: "EU" },
+  "estonia": { flag: "🇪🇪", region: "EU" },
+  "poland": { flag: "🇵🇱", region: "EU" },
+  "czech republic": { flag: "🇨🇿", region: "EU" },
+  "slovakia": { flag: "🇸🇰", region: "EU" },
+  "serbia": { flag: "🇷🇸", region: "EU" },
+  "united states": { flag: "🇺🇸", region: "NA" },
+  "canada": { flag: "🇨🇦", region: "NA" },
+  "mexico": { flag: "🇲🇽", region: "NA" },
+};
+
+const STATUS_MAP = {
+  "IN_PROGRESS": { label: "In progress", bg: C.limeBg, color: C.lime, border: C.limeBorder },
+  "Unable to Contact": { label: "Unable to contact", bg: C.redBg, color: C.red, border: C.redBorder },
+  "ATTEMPTED_TO_CONTACT": { label: "Attempted contact", bg: C.amberBg, color: C.amber, border: C.amberBorder },
+  "NEW": { label: "New", bg: C.purpleBg, color: C.purple, border: C.purpleBorder },
+  "OPEN": { label: "Open", bg: C.cyanBg, color: C.cyan, border: C.cyanBorder },
+  "CONNECTED": { label: "Connected", bg: C.emeraldBg, color: C.emerald, border: C.emeraldBorder },
+  "BAD_TIMING": { label: "Bad timing", bg: C.amberBg, color: C.amber, border: C.amberBorder },
+  "Qualified": { label: "Qualified", bg: C.emeraldBg, color: C.emerald, border: C.emeraldBorder },
+};
+
+// === PROSPECTS - DERIVED FROM TODAY'S CALENDAR + HUBSPOT (template - awaiting first refresh) ===
+const PROSPECTS = [];
+
+const OTHER_EVENTS = [];
+
+const HOUR = new Date().getHours();
+const PERIOD_EN = HOUR < 12 ? "morning" : HOUR < 18 ? "afternoon" : "evening";
+const PERIOD_FR = HOUR < 12 ? "Bonne matinée" : HOUR < 18 ? "Bon après-midi" : "Bonne soirée";
+const PERIOD_ES = HOUR < 12 ? "Buenos días" : HOUR < 18 ? "Buenas tardes" : "Buenas noches";
+const GREETINGS = [
+  { lang: "EN", text: `Good ${PERIOD_EN}, ${FIRST_NAME}` },
+  { lang: "FR", text: `${PERIOD_FR}, ${FIRST_NAME}` },
+  { lang: "ES", text: `${PERIOD_ES}, ${FIRST_NAME}` },
+];
+
+function Greeting() {
+  const [idx, setIdx] = useState(0);
+  const [fade, setFade] = useState(true);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setFade(false);
+      setTimeout(() => {
+        setIdx((i) => (i + 1) % GREETINGS.length);
+        setFade(true);
+      }, 320);
+    }, 2800);
+    return () => clearInterval(id);
+  }, []);
+  const g = GREETINGS[idx];
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: 1.5, color: C.lime, background: C.limeBg, border: `1px solid ${C.limeBorder}`, padding: "2px 9px", borderRadius: 4, flexShrink: 0 }}>{g.lang}</span>
+      <span style={{ fontSize: 26, fontWeight: 600, color: C.text, opacity: fade ? 1 : 0, transform: fade ? "translateY(0)" : "translateY(5px)", transition: "opacity 0.32s,transform 0.32s", lineHeight: 1, letterSpacing: "-0.02em" }}>{g.text}</span>
+    </div>
+  );
+}
+
+function CopyEmail({ email }) {
+  const [copied, setCopied] = useState(false);
+  const [hov, setHov] = useState(false);
+  const copy = (e) => {
+    e.stopPropagation();
+    if (!navigator.clipboard) return;
+    navigator.clipboard.writeText(email).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    });
+  };
+  return (
+    <button onClick={copy} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      title={copied ? "Copied" : `Copy ${email}`}
+      style={{ fontFamily: FONT_MONO, fontSize: 9, padding: "2px 8px", borderRadius: 3, border: `1px solid ${copied ? C.limeBorder : (hov ? C.borderHover : C.border)}`, background: copied ? C.limeBg : (hov ? C.surfaceAlt : "transparent"), color: copied ? C.lime : C.textMuted, cursor: "pointer", transition: "all 0.12s", marginLeft: 8 }}>
+      {copied ? "✓ Copied" : "Copy"}
+    </button>
+  );
+}
+
+function LinkBtn({ href, label, color, bg, border, small }) {
+  const [h, setH] = useState(false);
+  return (
+    <a href={href} target="_blank" rel="noreferrer" onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)}
+      style={{ fontFamily: FONT_SANS, fontSize: small ? 10 : 11, fontWeight: 500, textDecoration: "none", padding: small ? "3px 9px" : "4px 12px", borderRadius: 4, border: `1px solid ${h ? color : border}`, background: h ? color : bg, color: h ? C.bg : color, transition: "all 0.12s", whiteSpace: "nowrap" }}>
+      {label}
+    </a>
+  );
+}
+
+function RsvpBadge({ rsvp }) {
+  const map = {
+    needsAction: { label: "No reply", bg: C.amberBg, color: C.amber, border: C.amberBorder },
+    declined: { label: "Declined", bg: C.redBg, color: C.red, border: C.redBorder },
+  };
+  const s = map[rsvp];
+  if (!s) return null;
+  return <span style={{ fontFamily: FONT_MONO, fontSize: 9, background: s.bg, color: s.color, border: `1px solid ${s.border}`, borderRadius: 10, padding: "1px 7px", marginLeft: 5 }}>{s.label}</span>;
+}
+
+function HSPanel({ p }) {
+  const cd = p.country ? COUNTRY_MAP[p.country.toLowerCase()] : null;
+  const sd = p.leadStatus ? STATUS_MAP[p.leadStatus] : null;
+  return (
+    <div style={{ marginTop: 10, padding: "10px 12px", background: C.surfaceAlt, borderRadius: 6, border: `1px solid ${C.border}`, display: "flex", flexWrap: "wrap", gap: 14 }}>
+      <div style={{ minWidth: 140 }}>
+        <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.textHint, textTransform: "uppercase", marginBottom: 3 }}>Company</div>
+        {p.companyUrl ? (
+          <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textMid }}>
+            web: <a href={p.companyUrl} target="_blank" rel="noreferrer" style={{ color: C.lime, textDecoration: "underline" }}>{p.companyUrl.replace("https://www.", "")}</a>
+          </span>
+        ) : (
+          <div style={{ fontSize: 12, fontWeight: 500, color: C.text }}>{p.company || "-"}</div>
+        )}
+        {p.jobtitle && <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textMuted, marginTop: 2 }}>{p.jobtitle}</div>}
+      </div>
+      {cd && (
+        <div style={{ minWidth: 70 }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.textHint, textTransform: "uppercase", marginBottom: 3 }}>Market</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ fontSize: 16 }}>{cd.flag}</span>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 10, fontWeight: 500, color: C.cyan, background: C.cyanBg, border: `1px solid ${C.cyanBorder}`, padding: "1px 6px", borderRadius: 4 }}>{cd.region}</span>
+          </div>
+        </div>
+      )}
+      {sd && (
+        <div style={{ minWidth: 110 }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.textHint, textTransform: "uppercase", marginBottom: 3 }}>HS Status</div>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 9, background: sd.bg, color: sd.color, border: `1px solid ${sd.border}`, borderRadius: 10, padding: "2px 8px" }}>{sd.label}</span>
+        </div>
+      )}
+      {p.seats && (
+        <div style={{ minWidth: 70 }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.textHint, textTransform: "uppercase", marginBottom: 3 }}>Seats</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.cyan }}>{p.seats}</div>
+        </div>
+      )}
+      <div style={{ minWidth: 50 }}>
+        <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.textHint, textTransform: "uppercase", marginBottom: 3 }}>Deals</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: p.deals > 0 ? C.emerald : C.textHint, fontVariantNumeric: "tabular-nums" }}>{p.deals || "0"}</div>
+      </div>
+      {p.phone && (
+        <div style={{ minWidth: 120 }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.textHint, textTransform: "uppercase", marginBottom: 3 }}>Phone</div>
+          <a href={`tel:${p.phone}`} style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.lime, textDecoration: "none" }}>{p.phone}</a>
+        </div>
+      )}
+      {p.multiAttendee && <span style={{ alignSelf: "center", fontFamily: FONT_MONO, fontSize: 9, background: C.purpleBg, color: C.purple, border: `1px solid ${C.purpleBorder}`, borderRadius: 10, padding: "1px 7px" }}>👥 Multi-attendee</span>}
+      {p.deals > 0 && <span style={{ alignSelf: "center", fontFamily: FONT_MONO, fontSize: 9, background: C.emeraldBg, color: C.emerald, border: `1px solid ${C.emeraldBorder}`, borderRadius: 10, padding: "1px 7px" }}>★ {p.deals} deal{p.deals > 1 ? "s" : ""}</span>}
+    </div>
+  );
+}
+
+function NotesPanel({ id, notes, setNotes }) {
+  const val = notes[id] || "";
+  const [focused, setFocused] = useState(false);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 110 }}>
+      <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1.5, color: C.textHint, textTransform: "uppercase", marginBottom: 5, display: "flex", alignItems: "center", gap: 5 }}>
+        <span>Notes</span>
+        {val && <span style={{ color: C.lime, fontSize: 10 }}>●</span>}
+      </div>
+      <textarea
+        value={val}
+        onChange={(e) => setNotes((n) => ({ ...n, [id]: e.target.value }))}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        placeholder="Quick note..."
+        style={{ flex: 1, fontFamily: FONT_MONO, fontSize: 11, padding: "8px 10px", borderRadius: 4, border: `1px solid ${focused ? C.lime : C.border}`, background: C.surfaceAlt, color: C.text, outline: "none", resize: "vertical", minHeight: 96, lineHeight: 1.5, transition: "border-color 0.12s" }}
+      />
+    </div>
+  );
+}
+
+function ProspectCard({ m, notes, setNotes }) {
+  const [hov, setHov] = useState(false);
+  const [exp, setExp] = useState(false);
+  const cd = m.country ? COUNTRY_MAP[m.country.toLowerCase()] : null;
+  const isAlert = m.leadStatus === "Unable to Contact";
+  const accent = isAlert ? C.red : m.deals > 0 ? C.emerald : C.lime;
+  return (
+    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{ padding: "14px 16px", background: C.surface, border: `1px solid ${hov ? C.borderHover : C.border}`, borderLeft: `2px solid ${accent}`, borderRadius: 0, marginBottom: 8, transition: "all 0.14s" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "52px 1fr 200px", gap: 14 }}>
+        <div style={{ paddingTop: 2 }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: C.text, lineHeight: 1, marginBottom: 4, fontVariantNumeric: "tabular-nums" }}>{m.start}</div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>{m.end}</div>
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 5, marginBottom: 4 }}>
+            {cd && <span style={{ fontSize: 14 }}>{cd.flag}</span>}
+            <span style={{ fontSize: 15, fontWeight: 600, color: C.text, lineHeight: 1.2 }}>{m.name}</span>
+            <RsvpBadge rsvp={m.rsvp} />
+            {isAlert && <span style={{ fontFamily: FONT_MONO, fontSize: 9, background: C.redBg, color: C.red, border: `1px solid ${C.redBorder}`, borderRadius: 10, padding: "1px 7px" }}>⚠ Hard to reach</span>}
+            {m.seats && <span style={{ fontFamily: FONT_MONO, fontSize: 9, background: C.cyanBg, color: C.cyan, border: `1px solid ${C.cyanBorder}`, borderRadius: 10, padding: "1px 7px" }}>{m.seats} seats</span>}
+            {m.deals > 0 && <span style={{ fontFamily: FONT_MONO, fontSize: 9, background: C.emeraldBg, color: C.emerald, border: `1px solid ${C.emeraldBorder}`, borderRadius: 10, padding: "1px 7px" }}>★ SQL</span>}
+            {m.multiAttendee && <span style={{ fontFamily: FONT_MONO, fontSize: 9, background: C.purpleBg, color: C.purple, border: `1px solid ${C.purpleBorder}`, borderRadius: 10, padding: "1px 7px" }}>👥</span>}
+          </div>
+          <div style={{ marginBottom: 6 }}>
+            {m.companyUrl ? (
+              <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textMuted }}>
+                web: <a href={m.companyUrl} target="_blank" rel="noreferrer" style={{ color: C.textMid, textDecoration: "underline" }}>{m.companyUrl.replace("https://www.", "")}</a>
+              </span>
+            ) : (
+              <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textHint }}>{m.company}</span>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textHint }}>{m.email}</span>
+            <CopyEmail email={m.email} />
+          </div>
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+            {m.hsLink ? (
+              <LinkBtn href={m.hsLink} label="HubSpot →" color={C.lime} bg={C.limeBg} border={C.limeBorder} />
+            ) : (
+              <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>Not in HubSpot</span>
+            )}
+            {m.meetLink && <LinkBtn href={m.meetLink} label="Join Meet →" color={C.cyan} bg={C.cyanBg} border={C.cyanBorder} />}
+            <button onClick={() => setExp((e) => !e)}
+              style={{ fontFamily: FONT_MONO, fontSize: 9, padding: "3px 9px", borderRadius: 4, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", transition: "all 0.12s" }}>
+              {exp ? "▲ Less" : "▼ Details"}
+            </button>
+          </div>
+          {exp && <HSPanel p={m} />}
+        </div>
+        <NotesPanel id={m.email} notes={notes} setNotes={setNotes} />
+      </div>
+    </div>
+  );
+}
+
+function OtherCard({ ev }) {
+  const [hov, setHov] = useState(false);
+  const palMap = { amber: C.amber, purple: C.purple, cyan: C.cyan, emerald: C.emerald, red: C.red };
+  const accent = palMap[ev.color] || C.purple;
+  return (
+    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{ display: "grid", gridTemplateColumns: "52px 1fr", gap: 14, padding: "10px 16px", background: C.surface, border: `1px solid ${hov ? C.borderHover : C.border}`, borderLeft: `2px solid ${accent}`, borderRadius: 0, marginBottom: 8, transition: "all 0.14s" }}>
+      <div style={{ paddingTop: 2 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: C.text, lineHeight: 1, marginBottom: 4, fontVariantNumeric: "tabular-nums" }}>{ev.start}</div>
+        <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>{ev.end}</div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 16 }}>{ev.emoji}</span>
+        <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>{ev.name}</span>
+        {ev.note && <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>{ev.note}</span>}
+      </div>
+    </div>
+  );
+}
+
+function NowIndicator() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(id);
+  }, []);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const active = PROSPECTS.filter((m) => !m.canceled);
+  const cur = active.find((m) => toMin(m.start) <= nowMin && nowMin < toMin(m.end));
+  const nxt = active.find((m) => toMin(m.start) > nowMin);
+  if (!cur && !nxt) return null;
+  return (
+    <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+      {cur && <span style={{ fontFamily: FONT_MONO, fontSize: 10, background: C.redBg, color: C.red, border: `1px solid ${C.redBorder}`, borderRadius: 20, padding: "3px 12px" }}>● Live: {cur.name} ({cur.start}-{cur.end})</span>}
+      {!cur && nxt && <span style={{ fontFamily: FONT_MONO, fontSize: 10, background: C.limeBg, color: C.lime, border: `1px solid ${C.limeBorder}`, borderRadius: 20, padding: "3px 12px" }}>↗ Next: {nxt.name} at {nxt.start}</span>}
+    </div>
+  );
+}
+
+function Progress() {
+  const active = PROSPECTS.filter((m) => !m.canceled);
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(id);
+  }, []);
+  if (active.length === 0) return null;
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const done = active.filter((m) => toMin(m.end) <= nowMin).length;
+  const pct = Math.round((done / active.length) * 100);
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", color: C.textHint }}>Discovery calls</span>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textMuted, fontVariantNumeric: "tabular-nums" }}>{done}/{active.length} done</span>
+      </div>
+      <div style={{ height: 3, background: C.border, overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${pct}%`, background: C.lime, transition: "width 0.6s ease" }} />
+      </div>
+    </div>
+  );
+}
+
+function Timeline() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(id);
+  }, []);
+  const DAY_START = 7 * 60, DAY_END = 18 * 60, DAY_SPAN = DAY_END - DAY_START;
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const nowPct = Math.min(100, Math.max(0, ((nowMin - DAY_START) / DAY_SPAN) * 100));
+  const hours = Array.from({ length: 12 }, (_, i) => 7 + i);
+  const pct = (t) => Math.max(0, Math.min(100, ((toMin(t) - DAY_START) / DAY_SPAN) * 100));
+  const wPct = (s, e) => Math.max(0.5, pct(e) - pct(s));
+  const calls = PROSPECTS.filter((m) => !m.canceled).map((m) => ({ name: m.name.split(" ")[0], start: m.start, end: m.end }));
+  const palMap = { amber: C.amber, purple: C.purple, cyan: C.cyan, emerald: C.emerald, red: C.red };
+  const others = OTHER_EVENTS.map((e) => ({ name: e.name.split(" ")[0], start: e.start, end: e.end, color: palMap[e.color] || C.purple }));
+  return (
+    <div style={{ marginBottom: 24, background: C.surface, border: `1px solid ${C.border}`, padding: "14px 16px" }}>
+      <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", color: C.textHint, marginBottom: 10 }}>Day timeline</div>
+      <div style={{ position: "relative", height: 48 }}>
+        {hours.map((h) => {
+          const p = ((h * 60 - DAY_START) / DAY_SPAN) * 100;
+          return (
+            <div key={h} style={{ position: "absolute", left: `${p}%`, top: 0, bottom: 0, borderLeft: `1px solid ${C.border}`, opacity: 0.5 }}>
+              <span style={{ position: "absolute", top: 34, left: 2, fontFamily: FONT_MONO, fontSize: 7, color: C.textHint, transform: "translateX(-50%)" }}>{h}h</span>
+            </div>
+          );
+        })}
+        {calls.map((b, i) => (
+          <div key={i} title={`${b.name} ${b.start}`}
+            style={{ position: "absolute", top: 2, left: `${pct(b.start)}%`, width: `${wPct(b.start, b.end)}%`, height: 14, background: C.lime, opacity: 0.85, overflow: "hidden" }}>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 7, color: C.bg, padding: "0 2px", lineHeight: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", fontWeight: 600 }}>{b.name}</span>
+          </div>
+        ))}
+        {others.map((b, i) => (
+          <div key={i} title={b.name}
+            style={{ position: "absolute", top: 18, left: `${pct(b.start)}%`, width: `${wPct(b.start, b.end)}%`, height: 14, background: b.color, opacity: 0.6, overflow: "hidden" }}>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 7, color: C.bg, padding: "0 2px", lineHeight: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", fontWeight: 600 }}>{b.name}</span>
+          </div>
+        ))}
+        {nowMin >= DAY_START && nowMin <= DAY_END && (
+          <div style={{ position: "absolute", left: `${nowPct}%`, top: 0, bottom: 0, borderLeft: `2px solid ${C.red}`, zIndex: 10 }}>
+            <div style={{ position: "absolute", top: -1, left: -3, width: 6, height: 6, borderRadius: "50%", background: C.red }} />
+          </div>
+        )}
+      </div>
+      <div style={{ marginTop: 6, display: "flex", gap: 12 }}>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 8, color: C.textMuted }}><span style={{ color: C.lime }}>■</span> Calls</span>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 8, color: C.textMuted }}><span style={{ color: C.purple }}>■</span> Other</span>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 8, color: C.red }}>| Now</span>
+      </div>
+    </div>
+  );
+}
+
+function OpenSlots() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(id);
+  }, []);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  const blocks = [
+    ...PROSPECTS.filter((p) => !p.canceled).map((p) => [toMin(p.start), toMin(p.end)]),
+    ...OTHER_EVENTS.map((e) => [toMin(e.start), toMin(e.end)]),
+  ].sort((a, b) => a[0] - b[0]);
+
+  const merged = [];
+  for (const [s, e] of blocks) {
+    const start = Math.max(s, WORK_START);
+    const end = Math.min(e, WORK_END);
+    if (start >= end) continue;
+    if (merged.length && merged[merged.length - 1][1] >= start) {
+      merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], end);
+    } else {
+      merged.push([start, end]);
+    }
+  }
+
+  const gaps = [];
+  let cursor = WORK_START;
+  for (const [s, e] of merged) {
+    if (s > cursor && s - cursor >= MIN_SLOT) gaps.push([cursor, s]);
+    cursor = Math.max(cursor, e);
+  }
+  if (cursor < WORK_END && WORK_END - cursor >= MIN_SLOT) gaps.push([cursor, WORK_END]);
+
+  const upcoming = gaps.filter(([, e]) => e > nowMin);
+
+  return (
+    <div style={{ marginBottom: 24, background: C.surface, border: `1px solid ${C.border}`, padding: "14px 16px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10, flexWrap: "wrap", gap: 6 }}>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", color: C.textHint }}>Open booking slots · 09:00-18:00</span>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.lime, fontVariantNumeric: "tabular-nums" }}>{upcoming.length} bookable</span>
+      </div>
+      {upcoming.length === 0 ? (
+        <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textHint }}>Fully booked. Lunch and AFK blocked off.</span>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {upcoming.map(([s, e], i) => {
+            const dur = e - s;
+            const live = s <= nowMin && nowMin < e;
+            return (
+              <span key={i} style={{ fontFamily: FONT_MONO, fontSize: 10, padding: "4px 10px", borderRadius: 4, background: live ? C.limeBg : "transparent", border: `1px solid ${live ? C.lime : C.limeBorder}`, color: live ? C.lime : C.textMid, fontVariantNumeric: "tabular-nums" }}>
+                {fromMin(s)}-{fromMin(e)} <span style={{ color: C.textHint, marginLeft: 4 }}>{dur}m</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NotificationToggle() {
+  const supported = typeof window !== "undefined" && "Notification" in window;
+  const [perm, setPerm] = useState(supported ? Notification.permission : "unsupported");
+  const [hov, setHov] = useState(false);
+  const timersRef = useRef([]);
+
+  const enable = async () => {
+    if (!supported) return;
+    if (perm === "denied") {
+      alert("Notifications blocked. Re-enable in chrome://settings/content/notifications then refresh this page.");
+      return;
+    }
+    const result = await Notification.requestPermission();
+    setPerm(result);
+  };
+
+  useEffect(() => {
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
+    if (perm !== "granted") return;
+    const now = new Date();
+    const nowMs = now.getTime();
+    const todayBase = new Date(now);
+    todayBase.setHours(0, 0, 0, 0);
+    PROSPECTS.filter((p) => !p.canceled).forEach((p) => {
+      const fireMin = toMin(p.start) - NOTIFY_LEAD;
+      const fireTs = todayBase.getTime() + fireMin * 60 * 1000;
+      const delay = fireTs - nowMs;
+      if (delay <= 0) return;
+      const t = setTimeout(() => {
+        try {
+          new Notification(`📞 ${p.name} in ${NOTIFY_LEAD} min`, {
+            body: `${p.start} · ${p.company || ""}${p.meetLink ? "\nClick the dashboard tab to join" : ""}`,
+            tag: p.email,
+          });
+        } catch (e) { /* noop */ }
+      }, delay);
+      timersRef.current.push(t);
+    });
+    return () => timersRef.current.forEach(clearTimeout);
+  }, [perm]);
+
+  const upcomingCount = (() => {
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    return PROSPECTS.filter((p) => !p.canceled && (toMin(p.start) - NOTIFY_LEAD) > nowMin).length;
+  })();
+
+  if (!supported) return null;
+  const label = perm === "granted" ? `🔔 Alerts on · ${upcomingCount} pending` : perm === "denied" ? "🔕 Alerts blocked" : "🔔 Enable alerts";
+  const color = perm === "granted" ? C.lime : perm === "denied" ? C.red : C.textMuted;
+  const bg = perm === "granted" ? C.limeBg : perm === "denied" ? C.redBg : "transparent";
+  const border = perm === "granted" ? C.limeBorder : perm === "denied" ? C.redBorder : C.border;
+  return (
+    <button onClick={enable} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      title={perm === "granted" ? "Browser will alert 5 min before each call (tab must stay open)" : "Click to enable browser alerts 5 min before each call"}
+      style={{ fontFamily: FONT_MONO, fontSize: 10, padding: "4px 10px", borderRadius: 4, border: `1px solid ${hov ? color : border}`, background: bg, color, cursor: perm === "denied" ? "not-allowed" : "pointer", transition: "all 0.12s" }}>
+      {label}
+    </button>
+  );
+}
+
+function DayStats() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(id);
+  }, []);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const active = PROSPECTS.filter((m) => !m.canceled);
+  const done = active.filter((m) => toMin(m.end) <= nowMin).length;
+  const alerts = active.filter((m) => m.leadStatus === "Unable to Contact").length;
+  const sql = active.filter((m) => m.deals > 0).length;
+  const multi = active.filter((m) => m.multiAttendee).length;
+  const noReply = active.filter((m) => m.rsvp === "needsAction").length;
+  const stats = [
+    { label: "Calls", val: active.length, color: C.lime },
+    { label: "Done", val: `${done}/${active.length}`, color: C.emerald },
+    { label: "★ SQL", val: sql, color: C.emerald },
+    { label: "⚠ Alerts", val: alerts, color: C.red },
+    { label: "👥 Multi", val: multi, color: C.purple },
+    { label: "No reply", val: noReply, color: C.amber },
+  ];
+  return (
+    <div style={{ marginTop: 28, padding: "14px 16px", background: C.surface, border: `1px solid ${C.border}` }}>
+      <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 1.5, textTransform: "uppercase", color: C.textHint, marginBottom: 12 }}>Day stats</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 24 }}>
+        {stats.map((s, i) => (
+          <div key={i} style={{ textAlign: "center", minWidth: 55 }}>
+            <div style={{ fontSize: 22, fontWeight: 600, color: s.color, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.01em" }}>{s.val}</div>
+            <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint, marginTop: 2 }}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div style={{ padding: "32px 24px", background: C.surface, border: `1px dashed ${C.border}`, textAlign: "center" }}>
+      <div style={{ fontSize: 32, marginBottom: 8 }}>☎️</div>
+      <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>No prospect calls populated yet</div>
+      <div style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textMuted, marginBottom: 12 }}>
+        Run the briefing-refresh skill in Cowork to populate today's data
+      </div>
+      <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>
+        Say "refresh my daily briefing" in your Cowork chat
+      </div>
+    </div>
+  );
+}
+
+export default function DailyBriefing() {
+  const [notes, setNotes] = useState({});
+  const active = PROSPECTS.filter((m) => !m.canceled);
+  const other = [...OTHER_EVENTS].sort((a, b) => toMin(a.start) - toMin(b.start));
+  const isEmpty = PROSPECTS.length === 0 && OTHER_EVENTS.length === 0;
+  return (
+    <div style={{ fontFamily: FONT_SANS, minHeight: "100vh", background: C.bg, color: C.text }}>
+      <div style={{ maxWidth: 880, margin: "0 auto", padding: "44px 24px 80px" }}>
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, flexWrap: "wrap", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: C.lime, boxShadow: `0 0 10px ${C.lime}` }} />
+              <span style={{ fontFamily: FONT_MONO, fontSize: 11, letterSpacing: 2, color: C.textMid }}>CloudTalk</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <NotificationToggle />
+              <span style={{ fontFamily: FONT_MONO, fontSize: 9, background: C.emeraldBg, color: C.emerald, border: `1px solid ${C.emeraldBorder}`, borderRadius: 10, padding: "2px 8px" }}>● Live · GCal + HubSpot</span>
+              <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textHint }}>{TODAY_LABEL}</span>
+            </div>
+          </div>
+          <div style={{ marginBottom: 20 }}><Greeting /></div>
+          <div style={{ height: 1, background: C.border }} />
+        </div>
+        {isEmpty ? <EmptyState /> : (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
+              <span style={{ fontFamily: FONT_MONO, fontSize: 11, background: C.limeBg, color: C.lime, border: `1px solid ${C.limeBorder}`, borderRadius: 20, padding: "3px 13px" }}>{active.length} discovery calls</span>
+              <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textHint }}>{other.length} other events</span>
+            </div>
+            <NowIndicator />
+            <Progress />
+            <Timeline />
+            <OpenSlots />
+            <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 2, textTransform: "uppercase", color: C.textHint, marginBottom: 12 }}>Discovery calls</div>
+            {active.map((m, i) => <ProspectCard key={i} m={m} notes={notes} setNotes={setNotes} />)}
+            <div style={{ marginTop: 28 }}>
+              <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 2, textTransform: "uppercase", color: C.textHint, marginBottom: 12 }}>Rest of day</div>
+              {other.map((ev, i) => <OtherCard key={i} ev={ev} />)}
+            </div>
+            <DayStats />
+          </>
+        )}
+        <div style={{ marginTop: 28, paddingTop: 16, borderTop: `1px solid ${C.border}`, fontFamily: FONT_MONO, fontSize: 9, color: C.textHint, letterSpacing: 1 }}>
+          {REFRESHED_AT} · {OWNER.email} · {TODAY_LABEL}
+        </div>
+      </div>
+    </div>
+  );
+}

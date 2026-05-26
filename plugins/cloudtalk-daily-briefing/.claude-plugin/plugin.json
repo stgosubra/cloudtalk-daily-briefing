@@ -1,0 +1,12 @@
+{
+  "name": "cloudtalk-daily-briefing",
+  "version": "0.2.0",
+  "description": "Personal daily briefing dashboard for CloudTalk AEs. Pulls today's prospect calls from Google Calendar, joins them with HubSpot context (lead status, seats, country, phone), enriches each card with the latest Gmail thread signal, and renders a live local React dashboard. Auto-refreshes every weekday morning via a scheduled task.",
+  "author": {
+    "name": "Santiago Subra",
+    "email": "santiago.subra@cloudtalk.io"
+  },
+  "repository": "https://github.com/stgosubra/cloudtalk-daily-briefing",
+  "license": "CloudTalk internal use",
+  "keywords": ["cloudtalk", "sales", "hubspot", "calendar", "gmail", "daily-briefing", "prospect", "ae"]
+}

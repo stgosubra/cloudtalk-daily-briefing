@@ -47,6 +47,7 @@ const TODAY_CARD_KEYS = [
   "company", "companyUrl", "jobtitle", "country", "leadStatus", "leadSource",
   "deals", "seats", "phone", "multiAttendee",
   "companyBrief", "challengerInsight", "qualifierQuestions", "lastEmail",
+  "lusha",
 ];
 
 function reconcile(mod, meta) {
@@ -98,6 +99,18 @@ function reconcile(mod, meta) {
     if (!Array.isArray(card.qualifierQuestions) || card.qualifierQuestions.length === 0) {
       throw new Error(`today card[${i}] qualifierQuestions empty - prose not regenerated`);
     }
+    // every today-card must have at least 5 fully-formed questions with why fields;
+    // shallow discovery questions are a build failure, not a style preference
+    if (card.qualifierQuestions.length < 5) {
+      throw new Error(`today card[${i}] has only ${card.qualifierQuestions.length} qualifier questions - minimum 5 required; a call with fewer than 5 specific, vetted questions is under-prepared`);
+    }
+    card.qualifierQuestions.forEach((q, qi) => {
+      for (const field of ["key", "label", "hint", "why"]) {
+        if (typeof q[field] !== "string" || !q[field].trim()) {
+          throw new Error(`today card[${i}] qualifierQuestions[${qi}] missing or empty "${field}" - every question must have key, label, hint, and why; missing why means the caller does not know what to listen for`);
+        }
+      }
+    });
   });
 }
 

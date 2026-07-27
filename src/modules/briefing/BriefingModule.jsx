@@ -534,11 +534,136 @@ const MEDDPICC_ITEMS = [
   { key: "competition", label: "Competition", hint: "Are they evaluating Aircall / RingCentral / Twilio / Five9 / nothing?" },
 ];
 
+function LushaRow({ label, value }) {
+  if (value === null || value === undefined || value === "") return null;
+  return (
+    <div style={{ display: "flex", gap: 6, marginBottom: 2 }}>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.8, color: C.textHint, textTransform: "uppercase", minWidth: 90, flexShrink: 0, paddingTop: 1 }}>{label}</span>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textMid, wordBreak: "break-word" }}>{value}</span>
+    </div>
+  );
+}
+
+function LushaSection({ label }) {
+  return (
+    <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.cyan, textTransform: "uppercase", marginBottom: 4, marginTop: 10, fontWeight: 600, borderBottom: `1px solid ${C.cyanBorder}`, paddingBottom: 2 }}>{label}</div>
+  );
+}
+
+function DossierPanel({ lusha }) {
+  const l = lusha;
+
+  // data gaps block - rendered first, loudly
+  const hasDataGaps = Array.isArray(l.dataGaps) && l.dataGaps.length > 0;
+
+  // teamShape and seniorityShape rows
+  const hasTeamShape = Array.isArray(l.teamShape) && l.teamShape.length > 0;
+  const hasSeniorityShape = Array.isArray(l.seniorityShape) && l.seniorityShape.length > 0;
+  const hasCompetitors = Array.isArray(l.competitors) && l.competitors.length > 0;
+  const hasSignals = Array.isArray(l.signals) && l.signals.length > 0;
+
+  return (
+    <div style={{ fontSize: 11, lineHeight: 1.5, color: C.text }}>
+      {hasDataGaps && (
+        <div style={{ marginBottom: 10, padding: "8px 10px", background: C.amberBg, border: `1px solid ${C.amberBorder}`, borderRadius: 6 }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.amber, textTransform: "uppercase", marginBottom: 4, fontWeight: 700 }}>Data gaps - read before pitching</div>
+          {l.dataGaps.map((gap, i) => (
+            <div key={i} style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.amber, marginBottom: 2, wordBreak: "break-word" }}>- {gap}</div>
+          ))}
+        </div>
+      )}
+
+      <LushaSection label="Who" />
+      {!l.verified && (
+        <div style={{ fontFamily: FONT_MONO, fontSize: 9, background: C.amberBg, color: C.amber, border: `1px solid ${C.amberBorder}`, borderRadius: 4, padding: "2px 8px", display: "inline-block", marginBottom: 6 }}>Unverified - confirm role on the call</div>
+      )}
+      <LushaRow label="Title" value={l.title} />
+      <LushaRow label="Seniority" value={l.seniority} />
+      <LushaRow label="Department" value={l.department} />
+      <LushaRow label="Location" value={l.personLocation} />
+      {l.linkedin && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 2 }}>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.8, color: C.textHint, textTransform: "uppercase", minWidth: 90, flexShrink: 0, paddingTop: 1 }}>LinkedIn</span>
+          <a href={l.linkedin} target="_blank" rel="noreferrer" style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.blue, textDecoration: "none", wordBreak: "break-word" }}>Profile ↗</a>
+        </div>
+      )}
+
+      <LushaSection label="Company" />
+      <LushaRow label="Legal name" value={l.companyLegalName} />
+      <LushaRow label="Industry" value={l.industry} />
+      <LushaRow label="Sub-industry" value={l.subIndustry} />
+      {(l.headcount !== null && l.headcount !== undefined) && (
+        <LushaRow label="Headcount" value={`${l.headcount}${l.headcountBand ? ` (${l.headcountBand})` : ""}`} />
+      )}
+      {(l.headcount === null || l.headcount === undefined) && l.headcountBand && (
+        <LushaRow label="Headcount" value={l.headcountBand} />
+      )}
+      <LushaRow label="Founded" value={l.founded ? String(l.founded) : null} />
+      <LushaRow label="HQ" value={l.hq} />
+      <LushaRow label="Model" value={l.businessModel} />
+      {(l.linkedinFollowers !== null && l.linkedinFollowers !== undefined) && (
+        <LushaRow label="LI followers" value={String(l.linkedinFollowers)} />
+      )}
+      {l.mainLine && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 2 }}>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.8, color: C.textHint, textTransform: "uppercase", minWidth: 90, flexShrink: 0, paddingTop: 1 }}>Main line</span>
+          <a href={`tel:${l.mainLine}`} style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.blue, textDecoration: "none", wordBreak: "break-word" }}>{l.mainLine}</a>
+        </div>
+      )}
+
+      {(hasTeamShape || hasSeniorityShape) && <LushaSection label="Shape" />}
+      {hasTeamShape && (
+        <div style={{ marginBottom: 6 }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, color: C.textHint, textTransform: "uppercase", marginBottom: 3, letterSpacing: 0.6 }}>Team by dept</div>
+          {l.teamShape.map((row, i) => (
+            <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 1 }}>
+              <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textMid, minWidth: 160 }}>{row.dept}</span>
+              <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.cyan, fontWeight: 600 }}>{row.count}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {hasSeniorityShape && (
+        <div style={{ marginBottom: 4 }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, color: C.textHint, textTransform: "uppercase", marginBottom: 3, letterSpacing: 0.6 }}>Team by level</div>
+          {l.seniorityShape.map((row, i) => (
+            <div key={i} style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 1 }}>
+              <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textMid, minWidth: 160 }}>{row.level}</span>
+              <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.cyan, fontWeight: 600 }}>{row.count}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {(hasCompetitors || l.itSpend || l.funding || hasSignals) && <LushaSection label="Market" />}
+      {hasCompetitors && <LushaRow label="Competitors" value={l.competitors.join(", ")} />}
+      <LushaRow label="IT spend" value={l.itSpend} />
+      <LushaRow label="Funding" value={l.funding} />
+      {hasSignals && (
+        <div style={{ marginTop: 2 }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, color: C.textHint, textTransform: "uppercase", marginBottom: 3, letterSpacing: 0.6 }}>Signals</div>
+          {l.signals.map((s, i) => (
+            <div key={i} style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textMid, marginBottom: 2, wordBreak: "break-word" }}>- {s}</div>
+          ))}
+        </div>
+      )}
+
+      {l.industryContext && (
+        <>
+          <LushaSection label="Industry" />
+          <div style={{ fontSize: 10, color: C.textMid, lineHeight: 1.6, whiteSpace: "pre-line", wordBreak: "break-word" }}>{l.industryContext}</div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function HSPanel({ p, notes, setNotes }) {
   const cd = p.country ? COUNTRY_MAP[p.country.toLowerCase()] : null;
   const sd = p.leadStatus ? STATUS_MAP[p.leadStatus] : null;
   const [briefOpen, setBriefOpen] = useState(false);
   const [qualifyOpen, setQualifyOpen] = useState(false);
+  const [dossierOpen, setDossierOpen] = useState(false);
   const meddpiccState = (notes && notes[`${p.email}::meddpicc`]) || {};
   const toggleMeddpicc = (key) => {
     if (!setNotes) return;
@@ -551,7 +676,7 @@ function HSPanel({ p, notes, setNotes }) {
   const qualifierItems = (p.qualifierQuestions && p.qualifierQuestions.length > 0) ? p.qualifierQuestions : MEDDPICC_ITEMS;
   return (
     <div style={{ marginTop: 10, padding: "13px 15px", background: C.surfaceAlt, borderRadius: 9, border: `1px solid ${C.border}`, display: "flex", flexWrap: "wrap", gap: 18 }}>
-      <div style={{ minWidth: 0, flex: (briefOpen || qualifyOpen) ? "1 1 100%" : "0 0 auto" }}>
+      <div style={{ minWidth: 0, flex: (briefOpen || qualifyOpen || dossierOpen) ? "1 1 100%" : "0 0 auto" }}>
         <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.6, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>Role & company</div>
         {p.jobtitle ? (
           <div style={{ fontSize: 13, fontWeight: 600, color: C.text, lineHeight: 1.3 }}>{p.jobtitle}</div>
@@ -560,7 +685,7 @@ function HSPanel({ p, notes, setNotes }) {
         )}
         <div style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textMuted, marginTop: 3 }}>{p.company || "-"}</div>
         {p.companyUrl && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2, flexWrap: "wrap" }}>
             <a href={p.companyUrl} target="_blank" rel="noreferrer" style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.blue, textDecoration: "none" }}>
               {p.companyUrl.replace("https://www.", "")} ↗
             </a>
@@ -578,6 +703,15 @@ function HSPanel({ p, notes, setNotes }) {
             >
               {qualifyOpen ? "▾" : "▸"} Qualify {checkedCount > 0 && `(${checkedCount}/${qualifierItems.length})`}
             </button>
+            {p.lusha && (
+              <button
+                onClick={() => setDossierOpen((o) => !o)}
+                title={dossierOpen ? "Hide Lusha dossier" : "Open full Lusha dossier - person + company + signals"}
+                style={{ fontFamily: FONT_MONO, fontSize: 9, fontWeight: 500, padding: "1px 7px", borderRadius: 10, border: `1px solid ${dossierOpen ? C.cyanBorder : C.border}`, background: dossierOpen ? C.cyanBg : C.surface, color: dossierOpen ? C.cyan : C.textMuted, cursor: "pointer", transition: "all 0.12s", lineHeight: 1.3 }}
+              >
+                {dossierOpen ? "▾ Dossier" : "▸ Dossier"}
+              </button>
+            )}
           </div>
         )}
         {briefOpen && (
@@ -606,10 +740,16 @@ function HSPanel({ p, notes, setNotes }) {
                   <span style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
                     <span style={{ fontSize: 11, fontWeight: 600, color: checked ? C.emerald : C.text, textDecoration: checked ? "line-through" : "none" }}>{item.label}</span>
                     <span style={{ fontSize: 10, color: C.textMuted, marginLeft: 6, wordBreak: "break-word" }}>· {item.hint}</span>
+                    {item.why && <span style={{ display: "block", fontSize: 9, color: C.textHint, fontStyle: "italic", marginTop: 1, wordBreak: "break-word" }}>{item.why}</span>}
                   </span>
                 </label>
               );
             })}
+          </div>
+        )}
+        {dossierOpen && p.lusha && (
+          <div style={{ marginTop: 8, padding: "11px 13px", background: C.cyanBg, border: `1px solid ${C.cyanBorder}`, borderRadius: 8, overflow: "hidden", wordBreak: "break-word" }}>
+            <DossierPanel lusha={p.lusha} />
           </div>
         )}
       </div>
@@ -1280,7 +1420,7 @@ function LiveNotesModal({ prospect, notes, setNotes, onClose }) {
     refs.current.lastIdx = all.length;
     const transcriptText = [...ctx, ...newLines].map((l) => `[${l.who}] ${l.text}`).join("\n");
 
-    const prospectCtx = `Discovery call with ${prospect.name}${prospect.jobtitle ? `, ${prospect.jobtitle}` : ""} from ${prospect.company} (${prospect.country || "?"}, ${prospect.seats || "?"} seats, lead status: ${prospect.leadStatus}). Owner: ${OWNER.name} at CloudTalk (call-center / business phone software). Goal: qualify, surface buying signals, capture commitments.`;
+    const prospectCtx = `Discovery call with ${prospect.name}${prospect.jobtitle ? `, ${prospect.jobtitle}` : ""} from ${prospect.company} (${prospect.country || "?"}, ${prospect.seats || "?"} seats, lead status: ${prospect.leadStatus}). Owner: ${OWNER.name} at CloudTalk (call-center / business phone software). Goal: qualify, surface buying signals, capture commitments.${prospect.lusha ? ` Dossier: ${prospect.lusha.industry || ""}${prospect.lusha.headcount ? `, ${prospect.lusha.headcount} staff` : ""}${(() => { const salesDept = (prospect.lusha.teamShape || []).find((r) => r.dept === "Sales"); return salesDept ? `, ${salesDept.count} in Sales` : ""; })()}${prospect.lusha.signals && prospect.lusha.signals.length > 0 ? `. Signals: ${prospect.lusha.signals.slice(0, 2).join("; ")}` : ""}.` : ""}`;
 
     const systemPrompt = `You are a real-time discovery-call assistant for a CloudTalk Account Executive.
 ${prospectCtx}

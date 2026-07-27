@@ -1,0 +1,2102 @@
+import { useState, useEffect, useRef, useMemo } from "react";
+import { motion, AnimatePresence, useSpring, useTransform } from "framer-motion";
+import { AuroraBackdrop, GlassCard, GlowButton, NeonDivider, HudLabel } from "../../design/primitives/index.js";
+import { COLOR, TYPE } from "../../design/tokens.js";
+import {
+  TODAY_LABEL,
+  REFRESHED_AT,
+  TODAY_ISO,
+  WEEK_DAYS,
+  LAST_WEEK_PROSPECTS,
+  TWO_WEEKS_AGO_PROSPECTS,
+  WEEK_PROSPECTS,
+  WEEK_OTHER_EVENTS,
+} from "./data.js";
+
+const OWNER = {
+  name: "Santiago Subra",
+  ownerId: 87191703,
+  portalId: 6195055,
+  email: "santiago.subra@cloudtalk.io",
+};
+const FIRST_NAME = OWNER.name.split(" ")[0];
+
+
+const WORK_START = 9 * 60;
+const WORK_END = 18 * 60;
+const MIN_SLOT = 15;
+const NOTIFY_LEAD = 5;
+
+const toMin = (t) => {
+  const [h, m] = t.split(":").map(Number);
+  return h * 60 + m;
+};
+const fromMin = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+
+// ============ CULT UI DESIGN TOKENS ============
+const CARD_SHADOW = "0 1px 0 0 rgba(255,255,255,0.03) inset, 0 0 0 1px rgba(255,255,255,0.04) inset, 0 0 0 1px rgba(0,0,0,0.18), 0 2px 2px rgba(0,0,0,0.12), 0 4px 4px rgba(0,0,0,0.1), 0 8px 8px rgba(0,0,0,0.08)";
+const CARD_SHADOW_HOVER = "0 1px 0 0 rgba(255,255,255,0.07) inset, 0 0 0 1px rgba(255,255,255,0.08) inset, 0 0 0 1px rgba(0,0,0,0.22), 0 4px 8px rgba(0,0,0,0.18), 0 8px 20px rgba(0,0,0,0.14), 0 0 0 3px rgba(89,112,255,0.10)";
+
+// Cult UI AnimatedNumber - spring-animated digit display
+function AnimatedNumber({ value, format }) {
+  const fmt = format || ((n) => String(Math.round(n)));
+  const spring = useSpring(value, { mass: 0.8, stiffness: 75, damping: 15 });
+  const display = useTransform(spring, fmt);
+  useEffect(() => { spring.set(value); }, [spring, value]);
+  return <motion.span style={{ fontVariantNumeric: "tabular-nums" }}>{display}</motion.span>;
+}
+
+// === COCKPIT DARK PALETTE (CloudTalk tokens, dark-tuned) ===
+// Brand blue shifts lighter on dark (brand-300 #5970ff) so it stays legible;
+// *Bg keys are deep tints, *Border keys are mid stops. Keys unchanged from the
+// light theme so every existing C.* reference keeps working.
+// Palette pivoted to the Phase 1 design system (obsidian base + iris/violet
+// primary + cyan & magenta bleeds). Keys are unchanged so every existing
+// C.* reference inherits the new look automatically; *Bg values are now
+// translucent so the AuroraBackdrop bleeds through cards.
+const C = {
+  bg: "#04050B",                              // true obsidian canvas (aurora sits on top)
+  surface: "rgba(18,22,40,0.62)",             // glass tier 2 - default card fill
+  surfaceAlt: "rgba(28,32,56,0.78)",          // raised/alt surface (nested)
+  border: "rgba(255,255,255,0.06)",           // hairline edge
+  borderHover: "rgba(180,200,255,0.28)",      // active/hover edge
+  text: "#F5F6FF",
+  textMid: "#C7CBE0",
+  textMuted: "#8389A6",
+  textHint: "#5C6080",
+  // Primary brand now reads as iris/violet on a deep canvas.
+  blue:        "#6B5BFF",
+  blueBg:      "rgba(107,91,255,0.16)",
+  blueBorder:  "rgba(107,91,255,0.42)",
+  emerald:     "#4EE5A4",
+  emeraldBg:   "rgba(78,229,164,0.14)",
+  emeraldBorder: "rgba(78,229,164,0.42)",
+  meet:        "#4EE5A4",
+  meetBg:      "rgba(78,229,164,0.14)",
+  meetBorder:  "rgba(78,229,164,0.42)",
+  orange:      "#FF8A5C",
+  orangeBg:    "rgba(255,138,92,0.14)",
+  orangeBorder:"rgba(255,138,92,0.40)",
+  purple:      "#2563eb",
+  purpleBg:    "rgba(37,99,235,0.16)",
+  purpleBorder:"rgba(37,99,235,0.42)",
+  cyan:        "#2EC8FF",
+  cyanBg:      "rgba(46,200,255,0.14)",
+  cyanBorder:  "rgba(46,200,255,0.42)",
+  amber:       "#FFC65A",
+  amberBg:     "rgba(255,198,90,0.14)",
+  amberBorder: "rgba(255,198,90,0.40)",
+  red:         "#FF6464",
+  redBg:       "rgba(255,100,100,0.14)",
+  redBorder:   "rgba(255,100,100,0.40)",
+};
+
+const FONT_SANS = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+const FONT_MONO = "'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace";
+const FONT_DISPLAY = "'Rubik', 'Inter', sans-serif";
+
+// Phase 3 motion - elastic fade-up used for staggered reveal on day mode mount.
+const FADE_UP = {
+  hidden: { opacity: 0, y: 14 },
+  show:   { opacity: 1, y: 0, transition: { duration: 0.42, ease: [0.16, 1.2, 0.3, 1] } },
+};
+
+// ── Prospect qualification status (qualified / working / qualified_out)
+// Persisted as one localStorage entry keyed by prospect email. Read by the
+// agenda for dim/strike treatment, and by the tally header for a live count.
+// A future "Working" module can subscribe to MODULE_01_QUAL_KEY directly.
+const MODULE_01_QUAL_KEY = "module01.qualStatus";
+const QUAL_STATUSES = [
+  { id: "qualified",     label: "Demo",    title: "Qualified - moves to demo with AE",                       color: C.emerald, bg: C.emeraldBg, border: C.emeraldBorder },
+  { id: "working",       label: "Working", title: "Working - interested, timing off; needs follow-up",       color: C.amber,   bg: C.amberBg,   border: C.amberBorder },
+  { id: "qualified_out", label: "Out",     title: "Qualified Out - wrong ICP / pricing / timing / product",  color: C.red,     bg: C.redBg,     border: C.redBorder },
+];
+
+function useQualStatus() {
+  const [map, setMap] = useState(() => {
+    if (typeof window === "undefined") return {};
+    try { return JSON.parse(localStorage.getItem(MODULE_01_QUAL_KEY) || "{}"); }
+    catch { return {}; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(MODULE_01_QUAL_KEY, JSON.stringify(map)); } catch {}
+  }, [map]);
+  const set = (key, status) => setMap((prev) => {
+    const next = { ...prev };
+    if (!status || prev[key] === status) delete next[key];
+    else next[key] = status;
+    return next;
+  });
+  return [map, set];
+}
+
+function QualStatusPills({ value, onChange }) {
+  return (
+    <div role="group" aria-label="Qualification status" style={{ display: "inline-flex", gap: 4, marginLeft: 6 }}>
+      {QUAL_STATUSES.map((s) => {
+        const on = value === s.id;
+        return (
+          <button key={s.id} type="button" title={s.title}
+            onClick={(e) => { e.stopPropagation(); onChange(s.id); }}
+            style={{
+              fontFamily: FONT_MONO, fontSize: 9, fontWeight: on ? 700 : 500,
+              padding: "1px 7px", borderRadius: 10, cursor: "pointer",
+              background: on ? s.bg : "transparent",
+              color: on ? s.color : C.textMuted,
+              border: `1px solid ${on ? s.border : C.border}`,
+              letterSpacing: 0.2, transition: "all 0.12s",
+            }}>
+            {s.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Circular monogram action button: futuristic, minimal, ≥36px tap target.
+// Used in ProspectCard's action row to replace rectangular HubSpot/Meet/Notes buttons.
+// `as="a"` for hrefs, plain button otherwise. Optional `count` shows a corner badge.
+function MonogramButton({ initials, color, ariaLabel, title, href, onClick, count, size = 38 }) {
+  const [hov, setHov] = useState(false);
+  const [focus, setFocus] = useState(false);
+  const glow = hov || focus;
+  const baseStyle = {
+    position: "relative",
+    display: "inline-flex", alignItems: "center", justifyContent: "center",
+    width: size, height: size, borderRadius: "50%",
+    fontFamily: FONT_MONO,
+    fontSize: initials.length > 1 ? 11 : 13,
+    fontWeight: 700, letterSpacing: 0.4,
+    color: color,
+    background: glow ? `${color}22` : "transparent",
+    border: `1.5px solid ${color}`,
+    boxShadow: glow
+      ? `0 0 0 3px ${color}1A, 0 6px 18px -6px ${color}55, inset 0 0 12px -6px ${color}66`
+      : `inset 0 0 10px -8px ${color}55`,
+    cursor: "pointer",
+    textDecoration: "none",
+    transition: "background 0.18s, box-shadow 0.18s, transform 0.12s",
+    transform: glow ? "translateY(-1px)" : "translateY(0)",
+    outline: "none",
+    whiteSpace: "nowrap",
+  };
+  const inner = (
+    <>
+      <span style={{ pointerEvents: "none" }}>{initials}</span>
+      {count > 0 && (
+        <span aria-hidden="true" style={{
+          position: "absolute", top: -3, right: -3,
+          minWidth: 16, height: 16, padding: "0 4px",
+          borderRadius: 8, background: color, color: "#04050B",
+          fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700,
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          boxShadow: `0 0 0 2px #04050B`,
+        }}>{count}</span>
+      )}
+    </>
+  );
+  const handlers = {
+    onMouseEnter: () => setHov(true),
+    onMouseLeave: () => setHov(false),
+    onFocus: () => setFocus(true),
+    onBlur: () => setFocus(false),
+  };
+  if (href) {
+    return (
+      <a href={href} target="_blank" rel="noreferrer"
+        aria-label={ariaLabel} title={title}
+        style={baseStyle} {...handlers}>
+        {inner}
+      </a>
+    );
+  }
+  return (
+    <button type="button" onClick={onClick}
+      aria-label={ariaLabel} title={title}
+      style={baseStyle} {...handlers}>
+      {inner}
+    </button>
+  );
+}
+
+function qualTally(prospects, qualMap) {
+  const t = { qualified: 0, working: 0, qualified_out: 0, pending: 0 };
+  for (const p of prospects) {
+    const s = qualMap[p.email];
+    if (s === "qualified" || s === "working" || s === "qualified_out") t[s]++;
+    else t.pending++;
+  }
+  return t;
+}
+
+// Compact stat tile used inside the right-rail "Today" card.
+function RailStat({ label, value, tone = "iris" }) {
+  const c = tone === "cyan" ? C.cyan : C.blue;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 70 }}>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 1.4, textTransform: "uppercase", color: C.textHint }}>
+        {label}
+      </span>
+      <span style={{
+        fontFamily: FONT_MONO,
+        fontSize: 24,
+        fontVariantNumeric: "tabular-nums",
+        color: c,
+        textShadow: `0 0 14px ${c}40`,
+      }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+const COUNTRY_MAP = {
+  "france": { flag: "🇫🇷", region: "FR" },
+  "netherlands": { flag: "🇳🇱", region: "NL" },
+  "the netherlands": { flag: "🇳🇱", region: "NL" },
+  "sweden": { flag: "🇸🇪", region: "NORDIC" },
+  "morocco": { flag: "🇲🇦", region: "FR" },
+  "pakistan": { flag: "🇵🇰", region: "MEA" },
+  "serbia": { flag: "🇷🇸", region: "DACH" },
+  "south africa": { flag: "🇿🇦", region: "APAC" },
+  "algeria": { flag: "🇩🇿", region: "MEA" },
+  "spain": { flag: "🇪🇸", region: "ES" },
+  "united kingdom": { flag: "🇬🇧", region: "EN" },
+  "lithuania": { flag: "🇱🇹", region: "EU" },
+  "hungary": { flag: "🇭🇺", region: "DACH" },
+  "united arab emirates": { flag: "🇦🇪", region: "MEA" },
+  "belgium": { flag: "🇧🇪", region: "FR" },
+  "ireland": { flag: "🇮🇪", region: "EN" },
+  "australia": { flag: "🇦🇺", region: "APAC" },
+  "slovenia": { flag: "🇸🇮", region: "EU" },
+  "georgia": { flag: "🇬🇪", region: "INTL" },
+  "bangladesh": { flag: "🇧🇩", region: "APAC" },
+  "india": { flag: "🇮🇳", region: "APAC" },
+  "portugal": { flag: "🇵🇹", region: "ES" },
+  "singapore": { flag: "🇸🇬", region: "APAC" },
+  "north macedonia": { flag: "🇲🇰", region: "EU" },
+  "canada": { flag: "🇨🇦", region: "INTL" },
+  "kenya": { flag: "🇰🇪", region: "APAC" },
+  "italy": { flag: "🇮🇹", region: "EU" },
+  "hong kong": { flag: "🇭🇰", region: "APAC" },
+  "germany": { flag: "🇩🇪", region: "DACH" },
+  "united states": { flag: "🇺🇸", region: "INTL" },
+  "jordan": { flag: "🇯🇴", region: "MEA" },
+  "denmark": { flag: "🇩🇰", region: "NORDIC" },
+  "israel": { flag: "🇮🇱", region: "MEA" },
+  "thailand": { flag: "🇹🇭", region: "APAC" },
+  "nigeria": { flag: "🇳🇬", region: "APAC" },
+  "czech republic": { flag: "🇨🇿", region: "EU" },
+  "ukraine": { flag: "🇺🇦", region: "EU" },
+  "malta": { flag: "🇲🇹", region: "EU" },
+  "belize": { flag: "🇧🇿", region: "INTL" },
+  "latvia": { flag: "🇱🇻", region: "EU" },
+  "bulgaria": { flag: "🇧🇬", region: "EU" },
+  "luxembourg": { flag: "🇱🇺", region: "FR" },
+  "cyprus": { flag: "🇨🇾", region: "EU" },
+  "turkey": { flag: "🇹🇷", region: "INTL" },
+  "slovakia": { flag: "🇸🇰", region: "EU" },
+  "albania": { flag: "🇦🇱", region: "INTL" },
+  "switzerland": { flag: "🇨🇭", region: "DACH" },
+  "philippines": { flag: "🇵🇭", region: "APAC" },
+  "estonia": { flag: "🇪🇪", region: "EU" },
+  "poland": { flag: "🇵🇱", region: "EU" },
+};
+
+const STATUS_MAP = {
+  "IN_PROGRESS": { label: "In progress", bg: C.blueBg, color: C.blue, border: C.blueBorder },
+  "Unable to Contact": { label: "Unable to contact", bg: C.redBg, color: C.red, border: C.redBorder },
+  "ATTEMPTED_TO_CONTACT": { label: "Attempted contact", bg: C.amberBg, color: C.amber, border: C.amberBorder },
+  "NEW": { label: "New", bg: C.purpleBg, color: C.purple, border: C.purpleBorder },
+  "Qualified": { label: "Qualified", bg: C.emeraldBg, color: C.emerald, border: C.emeraldBorder },
+  "OPEN": { label: "Open", bg: C.cyanBg, color: C.cyan, border: C.cyanBorder },
+};
+
+// Country -> IANA timezone for live local-time badge per prospect.
+const TZ_BY_COUNTRY = {
+  "france": "Europe/Paris",
+  "belgium": "Europe/Brussels",
+  "morocco": "Africa/Casablanca",
+  "algeria": "Africa/Algiers",
+  "netherlands": "Europe/Amsterdam",
+  "the netherlands": "Europe/Amsterdam",
+  "sweden": "Europe/Stockholm",
+  "spain": "Europe/Madrid",
+  "portugal": "Europe/Lisbon",
+  "united kingdom": "Europe/London",
+  "ireland": "Europe/Dublin",
+  "germany": "Europe/Berlin",
+  "denmark": "Europe/Copenhagen",
+  "italy": "Europe/Rome",
+  "slovenia": "Europe/Ljubljana",
+  "north macedonia": "Europe/Skopje",
+  "lithuania": "Europe/Vilnius",
+  "hungary": "Europe/Budapest",
+  "czech republic": "Europe/Prague",
+  "serbia": "Europe/Belgrade",
+  "georgia": "Asia/Tbilisi",
+  "united arab emirates": "Asia/Dubai",
+  "jordan": "Asia/Amman",
+  "israel": "Asia/Jerusalem",
+  "pakistan": "Asia/Karachi",
+  "india": "Asia/Kolkata",
+  "bangladesh": "Asia/Dhaka",
+  "singapore": "Asia/Singapore",
+  "hong kong": "Asia/Hong_Kong",
+  "thailand": "Asia/Bangkok",
+  "south africa": "Africa/Johannesburg",
+  "kenya": "Africa/Nairobi",
+  "nigeria": "Africa/Lagos",
+  "australia": "Australia/Sydney",
+  "united states": "America/New_York",
+  "canada": "America/Toronto",
+  "ukraine": "Europe/Kyiv",
+  "malta": "Europe/Malta",
+  "belize": "America/Belize",
+  "latvia": "Europe/Riga",
+  "bulgaria": "Europe/Sofia",
+  "luxembourg": "Europe/Luxembourg",
+  "cyprus": "Asia/Nicosia",
+  "turkey": "Europe/Istanbul",
+  "slovakia": "Europe/Bratislava",
+  "estonia": "Europe/Tallinn",
+  "poland": "Europe/Warsaw",
+};
+
+// Country -> Deepgram language code for live transcription. Override per prospect via `language` field.
+const LANG_BY_COUNTRY = {
+  "france": "fr",
+  "belgium": "fr",
+  "morocco": "fr",
+  "algeria": "fr",
+  "netherlands": "nl",
+  "the netherlands": "nl",
+  "sweden": "sv",
+  "spain": "es",
+  "portugal": "pt",
+  "united kingdom": "en-GB",
+  "ireland": "en-GB",
+  "australia": "en-US",
+  "pakistan": "en-US",
+  "serbia": "en-US",
+  "south africa": "en-US",
+  "lithuania": "en-US",
+  "hungary": "en-US",
+  "united arab emirates": "en-US",
+  "slovenia": "en-US",
+  "georgia": "en-US",
+  "india": "en-US",
+  "singapore": "en-US",
+  "north macedonia": "en-US",
+  "canada": "en-US",
+  "kenya": "en-US",
+  "bangladesh": "en-US",
+  "ukraine": "uk",
+  "malta": "en-US",
+  "belize": "en-US",
+  "latvia": "en-US",
+  "bulgaria": "en-US",
+  "luxembourg": "fr",
+  "cyprus": "en-US",
+  "turkey": "en-US",
+  "slovakia": "en-US",
+  "estonia": "en-US",
+  "poland": "pl",
+};
+
+// AI insight kinds - colors mapped to LIGHT palette
+const INSIGHT_KIND_STYLE = {
+  pain:          { bg: C.amberBg,    color: C.amber,    border: C.amberBorder,    label: "PAIN" },
+  qualifier:     { bg: C.emeraldBg,  color: C.emerald,  border: C.emeraldBorder,  label: "QUALIFIER" },
+  stack:         { bg: C.cyanBg,     color: C.cyan,     border: C.cyanBorder,     label: "STACK/CRM" },
+  competition:   { bg: C.redBg,      color: C.red,      border: C.redBorder,      label: "COMPETITION" },
+  champion:      { bg: C.emeraldBg,  color: C.emerald,  border: C.emeraldBorder,  label: "CHAMPION" },
+  buying_signal: { bg: C.purpleBg,   color: C.purple,   border: C.purpleBorder,   label: "BUY SIGNAL" },
+  objection:     { bg: C.redBg,      color: C.red,      border: C.redBorder,      label: "OBJECTION" },
+  action:        { bg: C.emeraldBg,  color: C.emerald,  border: C.emeraldBorder,  label: "ACTION" },
+  decision:      { bg: C.blueBg,     color: C.blue,     border: C.blueBorder,     label: "DECISION" },
+  question:      { bg: C.amberBg,    color: C.amber,    border: C.amberBorder,    label: "Q OPEN" },
+  key:           { bg: C.surfaceAlt, color: C.textMid,  border: C.border,         label: "KEY POINT" },
+};
+
+
+
+const HOUR = new Date().getHours();
+const PERIOD_EN = HOUR < 12 ? "morning" : HOUR < 18 ? "afternoon" : "evening";
+const PERIOD_FR = HOUR < 12 ? "Bonne matinée" : HOUR < 18 ? "Bon après-midi" : "Bonne soirée";
+const PERIOD_ES = HOUR < 12 ? "Buenos días" : HOUR < 18 ? "Buenas tardes" : "Buenas noches";
+const GREETINGS = [
+  { lang: "EN", text: `Good ${PERIOD_EN}, ${FIRST_NAME}` },
+  { lang: "FR", text: `${PERIOD_FR}, ${FIRST_NAME}` },
+  { lang: "ES", text: `${PERIOD_ES}, ${FIRST_NAME}` },
+];
+
+// ============ ATOMIC COMPONENTS ============
+
+function Greeting() {
+  const [idx, setIdx] = useState(0);
+  const [fade, setFade] = useState(true);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setFade(false);
+      setTimeout(() => {
+        setIdx((i) => (i + 1) % GREETINGS.length);
+        setFade(true);
+      }, 320);
+    }, 2800);
+    return () => clearInterval(id);
+  }, []);
+  const g = GREETINGS[idx];
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 10, letterSpacing: 1.5, color: C.blue, background: C.blueBg, border: `1px solid ${C.blueBorder}`, padding: "2px 9px", borderRadius: 4, flexShrink: 0 }}>{g.lang}</span>
+      <span style={{ fontSize: 28, fontWeight: 600, color: C.text, opacity: fade ? 1 : 0, transform: fade ? "translateY(0)" : "translateY(5px)", transition: "opacity 0.32s,transform 0.32s", lineHeight: 1, letterSpacing: "-0.02em" }}>{g.text}</span>
+    </div>
+  );
+}
+
+function CopyEmail({ email }) {
+  const [copied, setCopied] = useState(false);
+  const [hov, setHov] = useState(false);
+  const copy = (e) => {
+    e.stopPropagation();
+    if (!navigator.clipboard) return;
+    navigator.clipboard.writeText(email).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    });
+  };
+  return (
+    <button onClick={copy} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      title={copied ? "Copied" : `Copy ${email}`}
+      style={{ fontFamily: FONT_MONO, fontSize: 9, padding: "2px 8px", borderRadius: 4, border: `1px solid ${copied ? C.blueBorder : (hov ? C.borderHover : C.border)}`, background: copied ? C.blueBg : (hov ? C.surfaceAlt : C.surface), color: copied ? C.blue : C.textMuted, cursor: "pointer", transition: "all 0.12s", marginLeft: 8 }}>
+      {copied ? "✓ Copied" : "Copy"}
+    </button>
+  );
+}
+
+function LinkBtn({ href, label, color, bg, border, small, solid }) {
+  const padding = small ? "3px 9px" : "5px 12px";
+  const fontSize = small ? 10 : 11;
+  return (
+    <motion.a href={href} target="_blank" rel="noreferrer"
+      whileHover={{ scale: 1.03, boxShadow: `0 0 16px ${color}55, 0 2px 8px rgba(0,0,0,0.3)` }}
+      whileTap={{ scale: 0.97 }}
+      transition={{ type: "spring", stiffness: 300, damping: 20 }}
+      style={{ fontFamily: FONT_SANS, fontSize, fontWeight: 600, textDecoration: "none", padding, borderRadius: 6, border: `1px solid ${solid ? color : border}`, background: solid ? color : bg, color: solid ? "#FFF" : color, whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 4 }}>
+      {label}
+    </motion.a>
+  );
+}
+
+function LocalTimeBadge({ country }) {
+  const tz = country ? TZ_BY_COUNTRY[country.toLowerCase()] : null;
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    if (!tz) return;
+    const id = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(id);
+  }, [tz]);
+  if (!tz) return null;
+  let display;
+  try {
+    display = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: tz }).format(now);
+  } catch {
+    return null;
+  }
+  const tzShort = tz.split("/").pop().replace(/_/g, " ");
+  return (
+    <span title={`Their local time (${tz})`} style={{ fontFamily: FONT_MONO, fontSize: 9, background: C.cyanBg, color: C.cyan, border: `1px solid ${C.cyanBorder}`, borderRadius: 10, padding: "1px 7px" }}>
+      🕐 {display} {tzShort}
+    </span>
+  );
+}
+
+function RsvpBadge({ rsvp }) {
+  const map = {
+    needsAction: { label: "No reply", bg: C.amberBg, color: C.amber, border: C.amberBorder },
+    declined: { label: "Declined", bg: C.redBg, color: C.red, border: C.redBorder },
+  };
+  const s = map[rsvp];
+  if (!s) return null;
+  return <span style={{ fontFamily: FONT_MONO, fontSize: 9, background: s.bg, color: s.color, border: `1px solid ${s.border}`, borderRadius: 10, padding: "1px 7px", marginLeft: 5 }}>{s.label}</span>;
+}
+
+const MEDDPICC_ITEMS = [
+  { key: "metrics", label: "Metrics", hint: "What quantified outcome would justify this purchase? (e.g., +20% connect rate, -30% admin time)" },
+  { key: "economicBuyer", label: "Economic Buyer", hint: "Who owns the budget? Is it our contact or 2 levels up?" },
+  { key: "decisionCriteria", label: "Decision Criteria", hint: "What features/integrations are non-negotiable vs nice-to-have?" },
+  { key: "decisionProcess", label: "Decision Process", hint: "Who else evaluates? What's the timeline? Any procurement step?" },
+  { key: "paperProcess", label: "Paper Process", hint: "Legal review? Security questionnaire? DPA/GDPR sign-off?" },
+  { key: "identifyPain", label: "Identify Pain", hint: "What breaks today? What does the status quo cost them?" },
+  { key: "champion", label: "Champion", hint: "Is the contact someone who can sell this internally on our behalf?" },
+  { key: "competition", label: "Competition", hint: "Are they evaluating Aircall / RingCentral / Twilio / Five9 / nothing?" },
+];
+
+function HSPanel({ p, notes, setNotes }) {
+  const cd = p.country ? COUNTRY_MAP[p.country.toLowerCase()] : null;
+  const sd = p.leadStatus ? STATUS_MAP[p.leadStatus] : null;
+  const [briefOpen, setBriefOpen] = useState(false);
+  const [qualifyOpen, setQualifyOpen] = useState(false);
+  const meddpiccState = (notes && notes[`${p.email}::meddpicc`]) || {};
+  const toggleMeddpicc = (key) => {
+    if (!setNotes) return;
+    setNotes((prev) => ({
+      ...prev,
+      [`${p.email}::meddpicc`]: { ...(prev[`${p.email}::meddpicc`] || {}), [key]: !((prev[`${p.email}::meddpicc`] || {})[key]) },
+    }));
+  };
+  const checkedCount = Object.values(meddpiccState).filter(Boolean).length;
+  const qualifierItems = (p.qualifierQuestions && p.qualifierQuestions.length > 0) ? p.qualifierQuestions : MEDDPICC_ITEMS;
+  return (
+    <div style={{ marginTop: 10, padding: "13px 15px", background: C.surfaceAlt, borderRadius: 9, border: `1px solid ${C.border}`, display: "flex", flexWrap: "wrap", gap: 18 }}>
+      <div style={{ minWidth: 0, flex: (briefOpen || qualifyOpen) ? "1 1 100%" : "0 0 auto" }}>
+        <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.6, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>Role & company</div>
+        {p.jobtitle ? (
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.text, lineHeight: 1.3 }}>{p.jobtitle}</div>
+        ) : (
+          <div style={{ fontSize: 12, fontStyle: "italic", color: C.textHint }}>Role unknown</div>
+        )}
+        <div style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textMuted, marginTop: 3 }}>{p.company || "-"}</div>
+        {p.companyUrl && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+            <a href={p.companyUrl} target="_blank" rel="noreferrer" style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.blue, textDecoration: "none" }}>
+              {p.companyUrl.replace("https://www.", "")} ↗
+            </a>
+            <button
+              onClick={() => setBriefOpen((o) => !o)}
+              title={briefOpen ? "Hide company brief" : "Show 5-line company brief + CloudTalk fit"}
+              style={{ fontFamily: FONT_MONO, fontSize: 9, fontWeight: 500, padding: "1px 7px", borderRadius: 10, border: `1px solid ${briefOpen ? C.purpleBorder : C.border}`, background: briefOpen ? C.purpleBg : C.surface, color: briefOpen ? C.purple : C.textMuted, cursor: "pointer", transition: "all 0.12s", lineHeight: 1.3 }}
+            >
+              {briefOpen ? "▾ Brief" : "▸ Brief"}
+            </button>
+            <button
+              onClick={() => setQualifyOpen((o) => !o)}
+              title={qualifyOpen ? "Hide MEDDPICC checklist" : "Open MEDDPICC qualification checklist + Challenger insight"}
+              style={{ fontFamily: FONT_MONO, fontSize: 9, fontWeight: 500, padding: "1px 7px", borderRadius: 10, border: `1px solid ${qualifyOpen ? C.emeraldBorder : C.border}`, background: qualifyOpen ? C.emeraldBg : C.surface, color: qualifyOpen ? C.emerald : C.textMuted, cursor: "pointer", transition: "all 0.12s", lineHeight: 1.3 }}
+            >
+              {qualifyOpen ? "▾" : "▸"} Qualify {checkedCount > 0 && `(${checkedCount}/${qualifierItems.length})`}
+            </button>
+          </div>
+        )}
+        {briefOpen && (
+          <div style={{ marginTop: 8, padding: "10px 12px", background: C.purpleBg, border: `1px solid ${C.purpleBorder}`, borderRadius: 8, fontSize: 11, lineHeight: 1.6, color: C.text, whiteSpace: "pre-line" }}>
+            {p.companyBrief || <span style={{ fontStyle: "italic", color: C.textHint }}>Brief not generated yet - will be added in next refresh.</span>}
+          </div>
+        )}
+        {qualifyOpen && (
+          <div style={{ marginTop: 8, padding: "11px 13px", background: C.emeraldBg, border: `1px solid ${C.emeraldBorder}`, borderRadius: 8, fontSize: 11, lineHeight: 1.5, color: C.text, overflow: "hidden", wordBreak: "break-word" }}>
+            {p.challengerInsight ? (
+              <div style={{ marginBottom: 10, padding: "6px 8px", background: C.surface, border: `1px solid ${C.emeraldBorder}`, borderRadius: 4 }}>
+                <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.emerald, textTransform: "uppercase", marginBottom: 3, fontWeight: 600 }}>⚡ Challenger insight - lead with this</div>
+                <div style={{ fontSize: 11, color: C.text, lineHeight: 1.5, wordBreak: "break-word" }}>{p.challengerInsight}</div>
+              </div>
+            ) : (
+              <div style={{ marginBottom: 10, fontStyle: "italic", color: C.textHint, fontSize: 10 }}>Challenger insight not generated yet - will be added in next refresh.</div>
+            )}
+            <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1, color: C.emerald, textTransform: "uppercase", marginBottom: 6, fontWeight: 600 }}>{p.qualifierQuestions ? "Tailored discovery - tick as you discover" : "MEDDPICC checklist - tick as you discover"}</div>
+            {qualifierItems.map((item) => {
+              const checked = !!meddpiccState[item.key];
+              return (
+                <label key={item.key} onClick={(e) => { e.preventDefault(); toggleMeddpicc(item.key); }} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "4px 6px", borderRadius: 4, cursor: "pointer", background: checked ? C.surface : "transparent", marginBottom: 2 }}>
+                  <span style={{ marginTop: 1, fontSize: 12, color: checked ? C.emerald : C.textHint, fontFamily: FONT_MONO, lineHeight: 1, userSelect: "none" }}>
+                    {checked ? "☑" : "☐"}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: checked ? C.emerald : C.text, textDecoration: checked ? "line-through" : "none" }}>{item.label}</span>
+                    <span style={{ fontSize: 10, color: C.textMuted, marginLeft: 6, wordBreak: "break-word" }}>· {item.hint}</span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+      </div>
+      {p.seats && (
+        <div style={{ minWidth: 90 }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.6, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>Seats (agg.)</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: C.cyan, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{p.seats}</div>
+        </div>
+      )}
+      {p.leadSource && (
+        <div style={{ minWidth: 110 }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.6, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>Lead source</div>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 10, background: C.purpleBg, color: C.purple, border: `1px solid ${C.purpleBorder}`, borderRadius: 4, padding: "2px 7px" }}>{p.leadSource}</span>
+        </div>
+      )}
+      {cd && (
+        <div style={{ minWidth: 80 }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.6, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>Market</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ fontSize: 16 }}>{cd.flag}</span>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 10, fontWeight: 500, color: C.cyan, background: C.cyanBg, border: `1px solid ${C.cyanBorder}`, padding: "1px 6px", borderRadius: 4 }}>{cd.region}</span>
+          </div>
+        </div>
+      )}
+      {sd && (
+        <div style={{ minWidth: 110 }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.6, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>HS status</div>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 10, background: sd.bg, color: sd.color, border: `1px solid ${sd.border}`, borderRadius: 10, padding: "2px 8px" }}>{sd.label}</span>
+        </div>
+      )}
+      {p.phone && (
+        <div style={{ minWidth: 130 }}>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.6, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>Phone</div>
+          <a href={`tel:${p.phone}`} style={{ fontFamily: FONT_MONO, fontSize: 11, color: C.blue, textDecoration: "none" }}>{p.phone}</a>
+        </div>
+      )}
+      {p.multiAttendee && <span style={{ alignSelf: "center", fontFamily: FONT_MONO, fontSize: 9, background: C.purpleBg, color: C.purple, border: `1px solid ${C.purpleBorder}`, borderRadius: 10, padding: "1px 7px" }}>👥 Multi-attendee</span>}
+    </div>
+  );
+}
+
+function NotesPanel({ id, notes, setNotes }) {
+  const val = notes[id] || "";
+  const [focused, setFocused] = useState(false);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 110 }}>
+      <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 1.5, color: C.textHint, textTransform: "uppercase", marginBottom: 5, display: "flex", alignItems: "center", gap: 5 }}>
+        <span>Notes</span>
+        {val && <span style={{ color: C.blue, fontSize: 10 }}>●</span>}
+      </div>
+      <textarea
+        value={val}
+        onChange={(e) => setNotes((n) => ({ ...n, [id]: e.target.value }))}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        placeholder="Quick note..."
+        style={{ flex: 1, fontFamily: FONT_MONO, fontSize: 11, padding: "9px 11px", borderRadius: 7, border: `1px solid ${focused ? C.blue : C.border}`, background: C.surfaceAlt, color: C.text, outline: "none", resize: "vertical", minHeight: 96, lineHeight: 1.5, transition: "border-color 0.12s" }}
+      />
+    </div>
+  );
+}
+
+// ============ CARDS (Daily + Weekly) ============
+
+function ProspectCard({ m, notes, setNotes, onOpenNotes, index, qualStatus, setQualStatus }) {
+  const [exp, setExp] = useState(false);
+  const cd = m.country ? COUNTRY_MAP[m.country.toLowerCase()] : null;
+  const isAlert = m.leadStatus === "Unable to Contact";
+  const qual = qualStatus || null;
+  const isOut = qual === "qualified_out";
+  const accent = qual === "qualified" ? C.emerald
+              : qual === "working"    ? C.amber
+              : qual === "qualified_out" ? C.red
+              : (isAlert ? C.red : C.blue);
+  const insightCount = (notes[`${m.email}::insights`] || []).length;
+  const lineCount = (notes[`${m.email}::lines`] || []).length;
+  const rawFirstName = (m.name || "there").split(/\s+/)[0];
+  const firstName = rawFirstName.charAt(0).toUpperCase() + rawFirstName.slice(1);
+  const gmailSubject = "Following up on our scheduled call - CloudTalk";
+  const gmailBody = [
+    `Hi ${firstName},`,
+    "",
+    "I am connected in the meeting right now - will you be joining?",
+    m.meetLink ? "" : null,
+    m.meetLink ? m.meetLink : null,
+    "",
+    "If you'd like to reschedule, please let me know what works for you, or feel free to book a new time directly here:",
+    "",
+    "https://scheduler.default.com/833/member/01d4ab6d-fbb1-4437-8545-938e2057c5de",
+    "",
+    "Look forward to speaking with you.",
+    "",
+    "Thanks,",
+  ].filter((l) => l !== null).join("\n");
+  const gmailComposeUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(m.email)}&su=${encodeURIComponent(gmailSubject)}&body=${encodeURIComponent(gmailBody)}`;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: (index || 0) * 0.07, type: "spring", stiffness: 100, damping: 18 }}
+      whileHover={{ y: -3, boxShadow: `${CARD_SHADOW_HOVER}, -6px 0 20px -12px ${accent}` }}
+      style={{ padding: "16px 18px 16px 19px", background: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${accent}`, borderRadius: 12, marginBottom: 10, boxShadow: CARD_SHADOW, cursor: "default", opacity: isOut ? 0.5 : 1, transition: "opacity 0.18s" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "52px 1fr 200px", gap: 14 }}>
+        <div style={{ paddingTop: 2 }}>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 22, fontWeight: 700, color: C.blue, lineHeight: 1, marginBottom: 4, fontVariantNumeric: "tabular-nums", textShadow: "0 0 18px rgba(89,112,255,0.45)" }}>{m.start}</div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>{m.end}</div>
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 5, marginBottom: 4 }}>
+            {cd && <span style={{ fontSize: 14 }}>{cd.flag}</span>}
+            <span style={{ fontSize: 15, fontWeight: 600, color: C.text, lineHeight: 1.2, textDecoration: isOut ? "line-through" : "none" }}>{m.name}</span>
+            {setQualStatus && <QualStatusPills value={qual} onChange={(s) => setQualStatus(m.email, s)} />}
+            <RsvpBadge rsvp={m.rsvp} />
+            <LocalTimeBadge country={m.country} />
+            {isAlert && <span style={{ fontFamily: FONT_MONO, fontSize: 9, background: C.redBg, color: C.red, border: `1px solid ${C.redBorder}`, borderRadius: 10, padding: "1px 7px" }}>⚠ Hard to reach</span>}
+            {m.seats && <span style={{ fontFamily: FONT_MONO, fontSize: 9, background: C.cyanBg, color: C.cyan, border: `1px solid ${C.cyanBorder}`, borderRadius: 10, padding: "1px 7px" }}>{m.seats} seats</span>}
+            {m.leadSource && <span style={{ fontFamily: FONT_MONO, fontSize: 9, background: C.purpleBg, color: C.purple, border: `1px solid ${C.purpleBorder}`, borderRadius: 10, padding: "1px 7px" }}>{m.leadSource}</span>}
+            {m.multiAttendee && <span style={{ fontFamily: FONT_MONO, fontSize: 9, background: C.purpleBg, color: C.purple, border: `1px solid ${C.purpleBorder}`, borderRadius: 10, padding: "1px 7px" }}>👥</span>}
+            {insightCount > 0 && <span title={`${lineCount} lines · ${insightCount} insights captured`} style={{ fontFamily: FONT_MONO, fontSize: 9, background: C.cyanBg, color: C.cyan, border: `1px solid ${C.cyanBorder}`, borderRadius: 10, padding: "1px 7px" }}>📝 {insightCount}</span>}
+          </div>
+          {m.jobtitle && (
+            <div style={{ fontSize: 12, fontWeight: 500, color: C.textMid, marginBottom: 4 }}>{m.jobtitle} · <span style={{ color: C.textMuted, fontWeight: 400 }}>{m.company}</span></div>
+          )}
+          {!m.jobtitle && (
+            <div style={{ marginBottom: 6 }}>
+              {m.companyUrl ? (
+                <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textMuted }}>
+                  web: <a href={m.companyUrl} target="_blank" rel="noreferrer" style={{ color: C.textMid, textDecoration: "underline" }}>{m.companyUrl.replace("https://www.", "")}</a>
+                </span>
+              ) : (
+                <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textHint }}>{m.company}</span>
+              )}
+            </div>
+          )}
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 6 }}>
+            <a href={gmailComposeUrl} target="_blank" rel="noreferrer"
+              title="Compose new Gmail to this contact"
+              style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.blue, textDecoration: "none", borderBottom: `1px dotted ${C.blueBorder}` }}>
+              ✉ {m.email}
+            </a>
+            <CopyEmail email={m.email} />
+          </div>
+          {m.lastEmail && (
+            <div style={{ marginBottom: 10, padding: "8px 10px", background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 7 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2, flexWrap: "wrap" }}>
+                <span style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.6, color: C.textHint, textTransform: "uppercase" }}>Last email</span>
+                <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textMuted }}>{m.lastEmail.date}</span>
+                {m.lastEmail.threadUrl && (
+                  <a href={m.lastEmail.threadUrl} target="_blank" rel="noreferrer"
+                    style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.blue, textDecoration: "none" }}>
+                    open in Gmail →
+                  </a>
+                )}
+              </div>
+              <div style={{ fontSize: 11, fontWeight: 500, color: C.text, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.lastEmail.subject}</div>
+              {m.lastEmail.snippet && (
+                <div style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textMuted, lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{m.lastEmail.snippet}</div>
+              )}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 9, flexWrap: "wrap", alignItems: "center" }}>
+            {m.hsLink ? (
+              <MonogramButton initials="H" color={C.orange}
+                href={m.hsLink} ariaLabel="Open in HubSpot" title="Open in HubSpot" />
+            ) : (
+              <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>Not in HubSpot</span>
+            )}
+            {m.meetLink && (
+              <MonogramButton initials="GM" color={C.meet}
+                href={m.meetLink} ariaLabel="Join Google Meet" title="Join Google Meet" />
+            )}
+            <MonogramButton initials="LV" color={C.purple}
+              onClick={() => onOpenNotes && onOpenNotes(m)}
+              ariaLabel="Open Live Notes"
+              title="Open Live Notes - capture transcript + AI insights from the call"
+              count={insightCount} />
+            <button onClick={() => setExp((e) => !e)}
+              style={{ fontFamily: FONT_MONO, fontSize: 9, padding: "3px 10px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.surface, color: C.textMuted, cursor: "pointer", transition: "all 0.12s", letterSpacing: 0.3 }}>
+              {exp ? "▲ Less" : "▼ Details"}
+            </button>
+          </div>
+          {exp && <HSPanel p={m} notes={notes} setNotes={setNotes} />}
+        </div>
+        <NotesPanel id={m.email} notes={notes} setNotes={setNotes} />
+      </div>
+    </motion.div>
+  );
+}
+
+function WeekCard({ m }) {
+  const [hov, setHov] = useState(false);
+  const cd = m.country ? COUNTRY_MAP[m.country.toLowerCase()] : null;
+  const isAlert = m.leadStatus === "Unable to Contact";
+  const accent = m.canceled ? C.textHint : (isAlert ? C.red : C.blue);
+  const opacity = m.canceled ? 0.55 : 1;
+  return (
+    <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      style={{ padding: "10px 12px", background: C.surface, border: `1px solid ${hov ? C.borderHover : C.border}`, borderLeft: `3px solid ${accent}`, borderRadius: 8, marginBottom: 6, transition: "all 0.14s", opacity, boxShadow: hov ? "0 2px 6px rgba(26,23,20,0.07)" : "0 1px 2px rgba(26,23,20,0.03)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6, marginBottom: 3 }}>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 11, fontWeight: 600, color: C.text, fontVariantNumeric: "tabular-nums" }}>{m.start}</span>
+        <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
+          {m.hsLink && <span title="In HubSpot" style={{ width: 6, height: 6, borderRadius: "50%", background: C.orange, display: "inline-block" }} />}
+          {m.meetLink && <span title="Meet link" style={{ width: 6, height: 6, borderRadius: "50%", background: C.meet, display: "inline-block" }} />}
+        </span>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap", marginBottom: 3 }}>
+        {cd && <span style={{ fontSize: 11 }}>{cd.flag}</span>}
+        <span style={{ fontSize: 12, fontWeight: 600, color: C.text, lineHeight: 1.2, wordBreak: "break-word" }}>{m.name}</span>
+      </div>
+      {(m.jobtitle || m.company) && (
+        <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textMuted, marginBottom: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {m.jobtitle || m.company}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
+        {m.canceled && <span style={{ fontFamily: FONT_MONO, fontSize: 8, background: C.redBg, color: C.red, border: `1px solid ${C.redBorder}`, borderRadius: 8, padding: "1px 5px" }}>cancelled</span>}
+        {isAlert && <span style={{ fontFamily: FONT_MONO, fontSize: 8, background: C.redBg, color: C.red, border: `1px solid ${C.redBorder}`, borderRadius: 8, padding: "1px 5px" }}>⚠</span>}
+        {m.leadSource && <span style={{ fontFamily: FONT_MONO, fontSize: 8, background: C.purpleBg, color: C.purple, border: `1px solid ${C.purpleBorder}`, borderRadius: 8, padding: "1px 5px" }}>{m.leadSource}</span>}
+        {m.seats && <span style={{ fontFamily: FONT_MONO, fontSize: 8, background: C.cyanBg, color: C.cyan, border: `1px solid ${C.cyanBorder}`, borderRadius: 8, padding: "1px 5px" }}>{m.seats}</span>}
+        {m.multiAttendee && <span style={{ fontFamily: FONT_MONO, fontSize: 8, background: C.purpleBg, color: C.purple, border: `1px solid ${C.purpleBorder}`, borderRadius: 8, padding: "1px 5px" }}>👥</span>}
+      </div>
+    </div>
+  );
+}
+
+function OtherCard({ ev, index }) {
+  const palMap = { amber: C.amber, purple: C.purple, cyan: C.cyan, emerald: C.emerald, red: C.red };
+  const accent = palMap[ev.color] || C.purple;
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: (index || 0) * 0.04, duration: 0.2 }}
+      whileHover={{ x: 2, boxShadow: CARD_SHADOW_HOVER }}
+      style={{ display: "grid", gridTemplateColumns: "52px 1fr", gap: 14, padding: "11px 16px", background: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${accent}`, borderRadius: 10, marginBottom: 8, boxShadow: CARD_SHADOW }}>
+      <div style={{ paddingTop: 2 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: C.text, lineHeight: 1, marginBottom: 4, fontVariantNumeric: "tabular-nums" }}>{ev.start}</div>
+        <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>{ev.end}</div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ fontSize: 16 }}>{ev.emoji}</span>
+        <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>{ev.name}</span>
+        {ev.note && <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>{ev.note}</span>}
+        {ev.meetLink && (() => {
+          const isZoom = /zoom\.us/.test(ev.meetLink);
+          return (
+            <MonogramButton initials={isZoom ? "Z" : "GM"} color={isZoom ? C.blue : C.meet} size={30}
+              href={ev.meetLink} ariaLabel={isZoom ? "Join Zoom" : "Join Google Meet"}
+              title={isZoom ? "Join Zoom" : "Join Google Meet"} />
+          );
+        })()}
+      </div>
+    </motion.div>
+  );
+}
+
+// ============ HELPERS (prop-driven) ============
+
+function NowIndicator({ prospects }) {
+  const [now, setNow] = useState(new Date());
+  const [expanded, setExpanded] = useState(true);
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(id);
+  }, []);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const active = prospects.filter((m) => !m.canceled);
+  const cur = active.find((m) => toMin(m.start) <= nowMin && nowMin < toMin(m.end));
+  const nxt = active.find((m) => toMin(m.start) > nowMin);
+  if (!cur && !nxt) return null;
+  const isLive = !!cur;
+  const label = cur ? `● ${cur.name}` : `↗ Next: ${nxt.name}`;
+  const sub = cur ? `${cur.start}-${cur.end}` : `at ${nxt.start}`;
+  const dotColor = isLive ? C.red : C.blue;
+  const bgColor = isLive ? C.redBg : C.blueBg;
+  const borderColor = isLive ? C.redBorder : C.blueBorder;
+  const textColor = isLive ? C.red : C.blue;
+  return (
+    <button onClick={() => setExpanded((e) => !e)}
+      style={{ display: "inline-flex", alignItems: "center", gap: expanded ? 10 : 0, marginBottom: 18, padding: "6px 14px 6px 11px", background: bgColor, border: `1px solid ${borderColor}`, borderRadius: 24, cursor: "pointer", overflow: "hidden", boxShadow: CARD_SHADOW, whiteSpace: "nowrap", outline: "none" }}>
+      <div
+        style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, flexShrink: 0, boxShadow: `0 0 8px ${dotColor}` }} />
+      <AnimatePresence>
+        {expanded && (
+          <motion.div key="content" initial={{ opacity: 0, width: 0 }} animate={{ opacity: 1, width: "auto" }} exit={{ opacity: 0, width: 0 }}
+            transition={{ duration: 0.22 }}
+            style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden" }}>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 11, fontWeight: 700, color: textColor }}>{label}</span>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textMuted, paddingLeft: 4, borderLeft: `1px solid ${borderColor}` }}>{sub}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </button>
+  );
+}
+
+function Progress({ prospects }) {
+  const active = prospects.filter((m) => !m.canceled);
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(id);
+  }, []);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const done = active.filter((m) => toMin(m.end) <= nowMin).length;
+  const total = Math.max(active.length, 1);
+  const pct = Math.round((done / total) * 100);
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8, alignItems: "center" }}>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 0.7, textTransform: "uppercase", color: C.textHint }}>Discovery calls</span>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: pct === 100 ? C.emerald : C.textMuted, fontVariantNumeric: "tabular-nums", transition: "color 0.3s" }}>
+          {done}/{active.length} done{pct === 100 ? " ✓" : ""}
+        </span>
+      </div>
+      <div style={{ height: 5, background: C.border, overflow: "hidden", borderRadius: 3 }}>
+        <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ type: "spring", stiffness: 80, damping: 18, delay: 0.1 }}
+          style={{ height: "100%", background: `linear-gradient(90deg, ${C.blue} 0%, #47cd89 100%)`, borderRadius: 3, boxShadow: "0 0 8px rgba(89,112,255,0.4)" }} />
+      </div>
+    </div>
+  );
+}
+
+function Timeline({ prospects, otherEvents }) {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(id);
+  }, []);
+  const DAY_START = 7 * 60, DAY_END = 18 * 60, DAY_SPAN = DAY_END - DAY_START;
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const nowPct = Math.min(100, Math.max(0, ((nowMin - DAY_START) / DAY_SPAN) * 100));
+  const hours = Array.from({ length: 12 }, (_, i) => 7 + i);
+  const pct = (t) => Math.max(0, Math.min(100, ((toMin(t) - DAY_START) / DAY_SPAN) * 100));
+  const wPct = (s, e) => Math.max(0.5, pct(e) - pct(s));
+  const calls = prospects.filter((m) => !m.canceled).map((m) => ({ name: m.name.split(" ")[0], start: m.start, end: m.end }));
+  const palMap = { amber: C.amber, purple: C.purple, cyan: C.cyan, emerald: C.emerald, red: C.red };
+  const others = otherEvents.map((e) => ({ name: e.name.split(" ")[0], start: e.start, end: e.end, color: palMap[e.color] || C.purple }));
+  return (
+    <div style={{ marginBottom: 24, background: C.surface, border: `1px solid ${C.border}`, padding: "14px 16px", borderRadius: 10, boxShadow: CARD_SHADOW }}>
+      <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 0.7, textTransform: "uppercase", color: C.textHint, marginBottom: 10 }}>Day timeline</div>
+      <div style={{ position: "relative", height: 48 }}>
+        {hours.map((h) => {
+          const p = ((h * 60 - DAY_START) / DAY_SPAN) * 100;
+          return (
+            <div key={h} style={{ position: "absolute", left: `${p}%`, top: 0, bottom: 0, borderLeft: `1px solid ${C.border}`, opacity: 0.7 }}>
+              <span style={{ position: "absolute", top: 34, left: 2, fontFamily: FONT_MONO, fontSize: 8, color: C.textHint, transform: "translateX(-50%)" }}>{h}h</span>
+            </div>
+          );
+        })}
+        {calls.map((b, i) => (
+          <div key={i} title={`${b.name} ${b.start}`}
+            style={{ position: "absolute", top: 2, left: `${pct(b.start)}%`, width: `${wPct(b.start, b.end)}%`, height: 14, background: C.blue, opacity: 0.9, overflow: "hidden", borderRadius: 2 }}>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 8, color: "#FFF", padding: "0 3px", lineHeight: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", fontWeight: 600 }}>{b.name}</span>
+          </div>
+        ))}
+        {others.map((b, i) => (
+          <div key={i} title={b.name}
+            style={{ position: "absolute", top: 18, left: `${pct(b.start)}%`, width: `${wPct(b.start, b.end)}%`, height: 14, background: b.color, opacity: 0.75, overflow: "hidden", borderRadius: 2 }}>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 8, color: "#FFF", padding: "0 3px", lineHeight: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", fontWeight: 600 }}>{b.name}</span>
+          </div>
+        ))}
+        {nowMin >= DAY_START && nowMin <= DAY_END && (
+          <div style={{ position: "absolute", left: `${nowPct}%`, top: 0, bottom: 0, borderLeft: `2px solid ${C.red}`, zIndex: 10 }}>
+            <div style={{ position: "absolute", top: -1, left: -3, width: 6, height: 6, borderRadius: "50%", background: C.red }} />
+          </div>
+        )}
+      </div>
+      <div style={{ marginTop: 8, display: "flex", gap: 14 }}>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textMuted }}><span style={{ color: C.blue }}>■</span> Calls</span>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textMuted }}><span style={{ color: C.purple }}>■</span> Other</span>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.red }}>| Now</span>
+      </div>
+    </div>
+  );
+}
+
+function OpenSlots({ prospects, otherEvents }) {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(id);
+  }, []);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
+  const blocks = [
+    ...prospects.filter((p) => !p.canceled).map((p) => [toMin(p.start), toMin(p.end)]),
+    ...otherEvents.map((e) => [toMin(e.start), toMin(e.end)]),
+  ].sort((a, b) => a[0] - b[0]);
+
+  const merged = [];
+  for (const [s, e] of blocks) {
+    const start = Math.max(s, WORK_START);
+    const end = Math.min(e, WORK_END);
+    if (start >= end) continue;
+    if (merged.length && merged[merged.length - 1][1] >= start) {
+      merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], end);
+    } else {
+      merged.push([start, end]);
+    }
+  }
+
+  const gaps = [];
+  let cursor = WORK_START;
+  for (const [s, e] of merged) {
+    if (s > cursor && s - cursor >= MIN_SLOT) gaps.push([cursor, s]);
+    cursor = Math.max(cursor, e);
+  }
+  if (cursor < WORK_END && WORK_END - cursor >= MIN_SLOT) gaps.push([cursor, WORK_END]);
+
+  const upcoming = gaps.filter(([, e]) => e > nowMin);
+
+  return (
+    <div style={{ marginBottom: 24, background: C.surface, border: `1px solid ${C.border}`, padding: "14px 16px", borderRadius: 10, boxShadow: CARD_SHADOW }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10, flexWrap: "wrap", gap: 6 }}>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 0.7, textTransform: "uppercase", color: C.textHint }}>Open booking slots · 09:00-18:00</span>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.blue, fontVariantNumeric: "tabular-nums" }}>{upcoming.length} bookable</span>
+      </div>
+      {upcoming.length === 0 ? (
+        <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textHint }}>Fully booked. Lunch and AFK blocked off.</span>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {upcoming.map(([s, e], i) => {
+            const dur = e - s;
+            const live = s <= nowMin && nowMin < e;
+            return (
+              <span key={i} style={{ fontFamily: FONT_MONO, fontSize: 10, padding: "4px 10px", borderRadius: 4, background: live ? C.blueBg : C.surfaceAlt, border: `1px solid ${live ? C.blue : C.blueBorder}`, color: live ? C.blue : C.textMid, fontVariantNumeric: "tabular-nums" }}>
+                {fromMin(s)}-{fromMin(e)} <span style={{ color: C.textHint, marginLeft: 4 }}>{dur}m</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NotificationToggle({ prospects }) {
+  const supported = typeof window !== "undefined" && "Notification" in window;
+  const [perm, setPerm] = useState(supported ? Notification.permission : "unsupported");
+  const [hov, setHov] = useState(false);
+  const timersRef = useRef([]);
+
+  const enable = async () => {
+    if (!supported) return;
+    if (perm === "denied") {
+      alert("Notifications blocked. Re-enable in chrome://settings/content/notifications then refresh this page.");
+      return;
+    }
+    const result = await Notification.requestPermission();
+    setPerm(result);
+  };
+
+  useEffect(() => {
+    timersRef.current.forEach(clearTimeout);
+    timersRef.current = [];
+    if (perm !== "granted") return;
+    const now = new Date();
+    const nowMs = now.getTime();
+    const todayBase = new Date(now);
+    todayBase.setHours(0, 0, 0, 0);
+    prospects.filter((p) => !p.canceled).forEach((p) => {
+      const fireMin = toMin(p.start) - NOTIFY_LEAD;
+      const fireTs = todayBase.getTime() + fireMin * 60 * 1000;
+      const delay = fireTs - nowMs;
+      if (delay <= 0) return;
+      const t = setTimeout(() => {
+        try {
+          new Notification(`📞 ${p.name} in ${NOTIFY_LEAD} min`, {
+            body: `${p.start} · ${p.company || ""}${p.meetLink ? "\nClick the dashboard tab to join" : ""}`,
+            tag: p.email,
+          });
+        } catch (e) { /* noop */ }
+      }, delay);
+      timersRef.current.push(t);
+    });
+    return () => timersRef.current.forEach(clearTimeout);
+  }, [perm, prospects]);
+
+  const upcomingCount = useMemo(() => {
+    const now = new Date();
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    return prospects.filter((p) => !p.canceled && (toMin(p.start) - NOTIFY_LEAD) > nowMin).length;
+  }, [prospects]);
+
+  if (!supported) return null;
+  const label = perm === "granted" ? `🔔 Alerts on · ${upcomingCount} pending` : perm === "denied" ? "🔕 Alerts blocked" : "🔔 Enable alerts";
+  const color = perm === "granted" ? C.blue : perm === "denied" ? C.red : C.textMuted;
+  const bg = perm === "granted" ? C.blueBg : perm === "denied" ? C.redBg : C.surface;
+  const border = perm === "granted" ? C.blueBorder : perm === "denied" ? C.redBorder : C.border;
+  return (
+    <button onClick={enable} onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      title={perm === "granted" ? "Browser will alert 5 min before each call (tab must stay open)" : "Click to enable browser alerts 5 min before each call"}
+      style={{ fontFamily: FONT_MONO, fontSize: 10, padding: "4px 10px", borderRadius: 5, border: `1px solid ${hov ? color : border}`, background: bg, color, cursor: perm === "denied" ? "not-allowed" : "pointer", transition: "all 0.12s" }}>
+      {label}
+    </button>
+  );
+}
+
+function DayStats({ prospects }) {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(id);
+  }, []);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const active = prospects.filter((m) => !m.canceled);
+  const done = active.filter((m) => toMin(m.end) <= nowMin).length;
+  const alerts = active.filter((m) => m.leadStatus === "Unable to Contact").length;
+  const multi = active.filter((m) => m.multiAttendee).length;
+  const noReply = active.filter((m) => m.rsvp === "needsAction").length;
+  const stats = [
+    { label: "Calls",    val: active.length, sub: null,            color: C.blue,   bg: C.blueBg,   border: C.blueBorder   },
+    { label: "Done",     val: done,          sub: `/ ${active.length}`, color: C.emerald, bg: C.emeraldBg, border: C.emeraldBorder },
+    { label: "Alerts",   val: alerts,        sub: null,            color: C.red,    bg: C.redBg,    border: C.redBorder    },
+    { label: "Multi",    val: multi,         sub: null,            color: C.purple, bg: C.purpleBg, border: C.purpleBorder },
+    { label: "No reply", val: noReply,       sub: null,            color: C.amber,  bg: C.amberBg,  border: C.amberBorder  },
+  ];
+  return (
+    <div style={{ marginTop: 28, display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+      {stats.map((s, i) => (
+        <motion.div key={i}
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: i * 0.06, type: "spring", stiffness: 100, damping: 18 }}
+          style={{ padding: "14px 12px 12px", background: s.bg, border: `1px solid ${s.border}`, borderRadius: 12, textAlign: "center", boxShadow: CARD_SHADOW }}>
+          <div style={{ fontSize: 28, fontWeight: 800, color: s.color, lineHeight: 1, letterSpacing: "-0.03em", display: "flex", alignItems: "baseline", justifyContent: "center", gap: 4 }}>
+            <AnimatedNumber value={s.val} />
+            {s.sub && <span style={{ fontSize: 12, fontWeight: 400, color: s.color, opacity: 0.6 }}>{s.sub}</span>}
+          </div>
+          <div style={{ fontFamily: FONT_MONO, fontSize: 8, color: s.color, marginTop: 6, opacity: 0.7, letterSpacing: 1, textTransform: "uppercase" }}>{s.label}</div>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+// ============ LIVE NOTES MODAL (Deepgram transcript + Claude/Gemini insights) ============
+
+function LiveNotesModal({ prospect, notes, setNotes, onClose }) {
+  const linesKey    = `${prospect.email}::lines`;
+  const insightsKey = `${prospect.email}::insights`;
+  const [running, setRunning] = useState(false);
+  const [interim, setInterim] = useState("");
+  const [error, setError] = useState("");
+  // API keys are secrets: hold them in sessionStorage so they clear when the browser
+  // session ends, instead of persisting on disk indefinitely. aiProvider is a plain
+  // preference and stays in localStorage.
+  const [dgKey, setDgKey] = useState(() => sessionStorage.getItem("lmn.dgKey") || "");
+  const [anthKey, setAnthKey] = useState(() => sessionStorage.getItem("lmn.anthKey") || "");
+  const [geminiKey, setGeminiKey] = useState(() => sessionStorage.getItem("lmn.geminiKey") || "");
+  const [aiProvider, setAiProvider] = useState(() => localStorage.getItem("lmn.aiProvider") || "gemini");
+  const defaultLang = prospect.language || (prospect.country && LANG_BY_COUNTRY[prospect.country.toLowerCase()]) || "en-US";
+  const [language, setLanguage] = useState(defaultLang);
+  const lines = notes[linesKey] || [];
+  const insights = notes[insightsKey] || [];
+  const transcriptRef = useRef(null);
+  const refs = useRef({ ws: null, recorder: null, ac: null, mic: null, tab: null, aiTimer: null, lastIdx: 0, livelines: [], running: false });
+
+  useEffect(() => { refs.current.livelines = lines; }, [lines]);
+
+  useEffect(() => {
+    const el = transcriptRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [lines, interim]);
+
+  function appendLines(newLines) {
+    setNotes((n) => ({ ...n, [linesKey]: [...(n[linesKey] || []), ...newLines] }));
+  }
+  function appendInsights(newOnes) {
+    if (!newOnes.length) return;
+    setNotes((n) => ({ ...n, [insightsKey]: [...(n[insightsKey] || []), ...newOnes] }));
+  }
+  function clearAll() {
+    if (!confirm("Clear notes and insights for this prospect?")) return;
+    setNotes((n) => { const c = { ...n }; delete c[linesKey]; delete c[insightsKey]; return c; });
+    refs.current.lastIdx = 0;
+  }
+
+  async function start() {
+    setError("");
+    if (!dgKey) { setError("Add your Deepgram API key below."); return; }
+    try {
+      const tabStream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      });
+      if (!tabStream.getAudioTracks().length) {
+        tabStream.getTracks().forEach((t) => t.stop());
+        throw new Error('No tab audio - when sharing, tick "Share tab audio".');
+      }
+      tabStream.getVideoTracks().forEach((t) => t.stop());
+
+      const micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+
+      const ac = new AudioContext();
+      const merger = ac.createChannelMerger(2);
+      ac.createMediaStreamSource(micStream).connect(merger, 0, 0);
+      ac.createMediaStreamSource(tabStream).connect(merger, 0, 1);
+      const dest = ac.createMediaStreamDestination();
+      merger.connect(dest);
+
+      const params = new URLSearchParams({
+        model: "nova-2", language, smart_format: "true",
+        interim_results: "true", multichannel: "true", channels: "2",
+      });
+      const ws = new WebSocket(`wss://api.deepgram.com/v1/listen?${params}`, ["token", dgKey]);
+      ws.onopen = () => {
+        const rec = new MediaRecorder(dest.stream, { mimeType: "audio/webm;codecs=opus" });
+        rec.ondataavailable = (e) => e.data.size && ws.readyState === 1 && ws.send(e.data);
+        rec.start(250);
+        refs.current.recorder = rec;
+        refs.current.running = true;
+        setRunning(true);
+      };
+      ws.onmessage = (msg) => {
+        let d; try { d = JSON.parse(msg.data); } catch { return; }
+        if (d.type !== "Results") return;
+        const alt = d.channel?.alternatives?.[0];
+        if (!alt?.transcript) return;
+        const ch = d.channel_index?.[0];
+        const who = ch === 0 ? "me" : ch === 1 ? "them" : "unknown";
+        if (d.is_final) {
+          setInterim("");
+          appendLines([{ ts: new Date().toTimeString().slice(0, 8), who, text: alt.transcript }]);
+        } else {
+          setInterim(alt.transcript);
+        }
+      };
+      ws.onerror = () => setError("Deepgram connection error.");
+      // Read live state via ref: this handler outlives the render that defined start(),
+      // so closing over the `running` state value would capture a stale (false) snapshot.
+      ws.onclose  = () => refs.current.running && setError("Deepgram disconnected.");
+
+      refs.current.ws = ws;
+      refs.current.ac = ac;
+      refs.current.mic = micStream;
+      refs.current.tab = tabStream;
+      refs.current.aiTimer = setInterval(generateInsight, 20000);
+      tabStream.getAudioTracks()[0].onended = () => stop();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  function stop() {
+    refs.current.running = false;
+    setRunning(false);
+    setInterim("");
+    try { refs.current.recorder?.stop(); } catch {}
+    try { refs.current.ws?.close(); } catch {}
+    refs.current.mic?.getTracks().forEach((t) => t.stop());
+    refs.current.tab?.getTracks().forEach((t) => t.stop());
+    if (refs.current.aiTimer) clearInterval(refs.current.aiTimer);
+    refs.current.aiTimer = null;
+    setTimeout(generateInsight, 200);
+  }
+
+  async function generateInsight() {
+    const activeKey = aiProvider === "claude" ? anthKey : geminiKey;
+    if (!activeKey) return;
+    const all = refs.current.livelines;
+    const newLines = all.slice(refs.current.lastIdx);
+    if (newLines.length < 2) return;
+    const ctx = all.slice(Math.max(0, refs.current.lastIdx - 6), refs.current.lastIdx);
+    refs.current.lastIdx = all.length;
+    const transcriptText = [...ctx, ...newLines].map((l) => `[${l.who}] ${l.text}`).join("\n");
+
+    const prospectCtx = `Discovery call with ${prospect.name}${prospect.jobtitle ? `, ${prospect.jobtitle}` : ""} from ${prospect.company} (${prospect.country || "?"}, ${prospect.seats || "?"} seats, lead status: ${prospect.leadStatus}). Owner: ${OWNER.name} at CloudTalk (call-center / business phone software). Goal: qualify, surface buying signals, capture commitments.`;
+
+    const systemPrompt = `You are a real-time discovery-call assistant for a CloudTalk Account Executive.
+${prospectCtx}
+
+CloudTalk = call-center / business phone software with deep CRM integrations and AI features. Your job: read the latest transcript chunk and surface NEW, useful discovery insights using a MEDDPICC + BANT framework with CloudTalk-specific qualifiers.
+
+Return ONLY a JSON array. Each item: { "kind": "<one of below>", "text": "<sentence>" }.
+
+Use this exact set of kinds:
+
+- "pain"         - explicit problem, frustration, or current-state pain. If they share metrics (call volume, connect rate, missed calls, agent ramp time, lost deals from poor follow-up), include the numbers verbatim.
+- "qualifier"    - CloudTalk-specific qualifier. Prefix the slot in brackets: [Team size], [Countries], [Use case: inbound/outbound/blended], [Compliance: GDPR/HIPAA/recording-consent]. Example: "[Team size] 12 agents now, hiring 8 in Q3."
+- "stack"        - their current telephony OR CRM (HubSpot, Salesforce, Pipedrive, Zendesk, Odoo) or other tools that affect integration scope.
+- "competition"  - another tool they are evaluating, comparing CloudTalk to, or currently using and considering replacing (Aircall, Dialpad, RingCentral, JustCall, Talkdesk, Genesys, Five9, etc).
+- "champion"     - an internal advocate, power user, or "person most frustrated with current setup" is named or identified.
+- "buying_signal"- timeline mentioned, budget scoped, decision-maker named, urgency, end-of-quarter or contract-renewal pressure, "we need this live by X".
+- "objection"    - concern, hesitation, pushback, blocker, or dealbreaker.
+- "action"       - explicit commitment by rep or prospect (e.g. "I'll send pricing by Friday", "we'll loop in our Head of Sales").
+- "decision"     - a decision actually made during the call.
+- "question"     - an important discovery question that came up but was NOT answered. Use when the prospect deflects, pivots, or the rep moves on without an answer.
+- "key"          - useful context that doesn't fit above (their role, what made them book the call, opener answers).
+
+Rules:
+- Each "text" <= 22 words, written as a complete sentence the AE could paste straight into HubSpot.
+- Prefer the prospect's exact phrasing for pain and metrics.
+- Skip filler, small talk, repeats. If a fact was already captured in a prior insight, do not log it again.
+- One insight per fact. Do not bundle.
+- If nothing new is notable in this chunk, return [].
+
+Return ONLY the JSON array, no prose, no markdown fences.`;
+    const userMsg = "Latest transcript chunk:\n\n" + transcriptText;
+
+    try {
+      let text = "[]";
+      if (aiProvider === "claude") {
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": anthKey,
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 700,
+            system: systemPrompt,
+            messages: [{ role: "user", content: userMsg }],
+          }),
+        });
+        if (!res.ok) { console.warn("Claude API", res.status, await res.text()); return; }
+        const json = await res.json();
+        text = json.content?.[0]?.text || "[]";
+      } else {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(geminiKey)}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              system_instruction: { parts: [{ text: systemPrompt }] },
+              contents: [{ role: "user", parts: [{ text: userMsg }] }],
+              generationConfig: { maxOutputTokens: 700, responseMimeType: "application/json" },
+            }),
+          }
+        );
+        if (!res.ok) { console.warn("Gemini API", res.status, await res.text()); return; }
+        const json = await res.json();
+        text = json.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+      }
+      const cleaned = text.trim().replace(/^```json\s*|\s*```$/g, "");
+      let parsed = []; try { parsed = JSON.parse(cleaned); } catch { return; }
+      const stamp = new Date().toTimeString().slice(0, 8);
+      appendInsights(
+        parsed.filter((i) => i?.text).map((i) => ({ ts: stamp, kind: i.kind || "key", text: i.text }))
+      );
+    } catch (e) { console.warn("insight failed", e); }
+  }
+
+  function exportMd() {
+    const date = new Date().toLocaleString();
+    let md = `# ${prospect.name} - ${prospect.company}\n\n*${date}*  -  ${prospect.email}\n\n`;
+    if (insights.length) {
+      md += `## AI Insights\n\n`;
+      for (const i of insights) md += `- **[${i.kind} - ${i.ts}]** ${i.text}\n`;
+      md += `\n`;
+    }
+    md += `## Transcript\n\n`;
+    for (const l of lines) md += `**${l.ts}** \`${l.who}\` - ${l.text}\n\n`;
+    const blob = new Blob([md], { type: "text/markdown" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `notes-${prospect.name.replace(/\s+/g, "_")}-${new Date().toISOString().slice(0, 10)}.md`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(a.href);
+  }
+
+  useEffect(() => () => stop(), []);  // eslint-disable-line
+
+  const btn = (bg, color, border) => ({
+    fontFamily: FONT_SANS, fontSize: 11, fontWeight: 500,
+    padding: "6px 12px", borderRadius: 5,
+    border: `1px solid ${border}`, background: bg, color, cursor: "pointer",
+  });
+  const input = {
+    width: "100%", fontFamily: FONT_MONO, fontSize: 11,
+    padding: "6px 9px", borderRadius: 4,
+    border: `1px solid ${C.border}`, background: C.surfaceAlt, color: C.text, outline: "none",
+  };
+  const aiKeyMissing = aiProvider === "claude" ? !anthKey : !geminiKey;
+
+  return (
+    <div role="dialog" aria-modal="true"
+      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(2px)" }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ width: "100%", maxWidth: 1100, height: "88vh", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 60px rgba(15,23,42,0.25)" }}>
+        <div style={{ padding: "12px 18px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", background: C.surface }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>📝 Live Notes - {prospect.name}</div>
+            <div style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textHint, marginTop: 2 }}>{prospect.company} - {prospect.start}-{prospect.end}</div>
+          </div>
+          <select value={language} onChange={(e) => setLanguage(e.target.value)} disabled={running}
+            title="Transcription language"
+            style={{ fontFamily: FONT_MONO, fontSize: 11, padding: "5px 8px", borderRadius: 4, border: `1px solid ${C.border}`, background: C.surfaceAlt, color: C.text, cursor: running ? "not-allowed" : "pointer", opacity: running ? 0.5 : 1 }}>
+            <option value="en-US">EN-US</option>
+            <option value="en-GB">EN-GB</option>
+            <option value="fr">FR</option>
+            <option value="nl">NL</option>
+            <option value="de">DE</option>
+            <option value="es">ES</option>
+            <option value="pt">PT</option>
+            <option value="it">IT</option>
+            <option value="sv">SV</option>
+            <option value="multi">MULTI</option>
+          </select>
+          {running && <span style={{ fontFamily: FONT_MONO, fontSize: 10, background: C.redBg, color: C.red, border: `1px solid ${C.redBorder}`, borderRadius: 10, padding: "2px 9px" }}>● REC</span>}
+          {!running ? (
+            <button onClick={start} style={btn(C.emerald, "#FFF", C.emerald)}>▶ Start</button>
+          ) : (
+            <button onClick={stop} style={btn(C.red, "#FFF", C.red)}>■ Stop</button>
+          )}
+          <button onClick={generateInsight} disabled={!running || aiKeyMissing} style={{ ...btn(C.cyanBg, C.cyan, C.cyanBorder), opacity: !running || aiKeyMissing ? 0.5 : 1 }}>✦ Insight now</button>
+          <button onClick={exportMd} style={btn(C.surface, C.text, C.border)}>↓ Export .md</button>
+          <button onClick={clearAll} style={btn(C.surface, C.textMuted, C.border)}>Clear</button>
+          <button onClick={onClose} style={btn(C.surface, C.textMuted, C.border)} aria-label="Close">✕</button>
+        </div>
+
+        {error && (
+          <div style={{ padding: "8px 18px", background: C.redBg, color: C.red, fontSize: 12, borderBottom: `1px solid ${C.redBorder}` }}>{error}</div>
+        )}
+
+        <div style={{ flex: 1, display: "grid", gridTemplateColumns: "1fr 360px", overflow: "hidden", minHeight: 0 }}>
+          <div ref={transcriptRef} style={{ padding: 18, overflowY: "auto", background: C.bg }}>
+            {lines.length === 0 && !running && (
+              <div style={{ fontSize: 13, color: C.textMid, lineHeight: 1.6, maxWidth: 540 }}>
+                <div style={{ fontWeight: 600, color: C.text, marginBottom: 8 }}>How to start</div>
+                1. Open the Meet call in another <b>Chrome / Edge</b> tab.<br />
+                2. Click <b>▶ Start</b>. Pick the <b>Meet tab</b> and tick <b>"Share tab audio"</b>.<br />
+                3. Allow your microphone.<br />
+                <div style={{ marginTop: 6, fontSize: 11, color: C.textHint }}>Both sides of the conversation get transcribed live, tagged <code>me</code> / <code>them</code>. AI insights appear on the right every 20s.</div>
+                {(!dgKey || aiKeyMissing) && (
+                  <div style={{ marginTop: 18, padding: 12, background: C.amberBg, border: `1px solid ${C.amberBorder}`, borderRadius: 6 }}>
+                    <div style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.amber, marginBottom: 8, fontWeight: 600 }}>⚠ API keys (kept for this browser session only)</div>
+                    <input type="password" placeholder="Deepgram API key (transcription)" value={dgKey}
+                      onChange={(e) => { setDgKey(e.target.value); sessionStorage.setItem("lmn.dgKey", e.target.value); }}
+                      style={input} />
+                    <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "center" }}>
+                      <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textMid }}>AI provider:</span>
+                      <select value={aiProvider}
+                        onChange={(e) => { setAiProvider(e.target.value); localStorage.setItem("lmn.aiProvider", e.target.value); }}
+                        style={{ ...input, width: "auto", padding: "5px 8px" }}>
+                        <option value="claude">Claude (Anthropic)</option>
+                        <option value="gemini">Gemini (Google)</option>
+                      </select>
+                    </div>
+                    {aiProvider === "claude" ? (
+                      <input type="password" placeholder="Anthropic API key - sk-ant-..." value={anthKey}
+                        onChange={(e) => { setAnthKey(e.target.value); sessionStorage.setItem("lmn.anthKey", e.target.value); }}
+                        style={{ ...input, marginTop: 6 }} />
+                    ) : (
+                      <input type="password" placeholder="Google AI Studio API key - AIza..." value={geminiKey}
+                        onChange={(e) => { setGeminiKey(e.target.value); sessionStorage.setItem("lmn.geminiKey", e.target.value); }}
+                        style={{ ...input, marginTop: 6 }} />
+                    )}
+                    <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint, marginTop: 8, lineHeight: 1.4 }}>
+                      {aiProvider === "claude"
+                        ? "Get a key at console.anthropic.com -> Settings -> API Keys"
+                        : "Get a free key at aistudio.google.com/app/apikey"}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {lines.map((l, i) => (
+              <div key={i} style={{ marginBottom: 7, fontSize: 13, lineHeight: 1.5 }}>
+                <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textHint, marginRight: 8 }}>{l.ts}</span>
+                <span style={{ fontFamily: FONT_MONO, fontSize: 9, padding: "1px 6px", borderRadius: 3, marginRight: 6, background: l.who === "me" ? C.blueBg : l.who === "them" ? C.purpleBg : C.surfaceAlt, color: l.who === "me" ? C.blue : l.who === "them" ? C.purple : C.textMuted, textTransform: "uppercase", fontWeight: 600 }}>{l.who}</span>
+                <span style={{ color: C.text }}>{l.text}</span>
+              </div>
+            ))}
+            {interim && (
+              <div style={{ fontSize: 13, fontStyle: "italic", color: C.textHint, marginBottom: 7 }}>
+                <span style={{ fontFamily: FONT_MONO, fontSize: 10, marginRight: 8 }}>...</span>
+                {interim}
+              </div>
+            )}
+          </div>
+          <div style={{ borderLeft: `1px solid ${C.border}`, padding: "14px 16px", overflowY: "auto", background: C.surface }}>
+            <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 0.7, textTransform: "uppercase", color: C.textHint, marginBottom: 10 }}>AI Insights - {insights.length}</div>
+            {insights.length === 0 && <div style={{ fontSize: 12, color: C.textHint, lineHeight: 1.5 }}>Insights appear every 20s. Pain, qualifiers, stack, competition, objections and buying signals get flagged automatically.</div>}
+            {insights.slice().reverse().map((i, k) => {
+              const s = INSIGHT_KIND_STYLE[i.kind] || INSIGHT_KIND_STYLE.key;
+              return (
+                <div key={k} style={{ padding: "8px 10px", background: s.bg, color: s.color, border: `1px solid ${s.border}`, borderRadius: 5, marginBottom: 8, fontSize: 12, lineHeight: 1.4 }}>
+                  <div style={{ fontFamily: FONT_MONO, fontSize: 9, opacity: 0.8, marginBottom: 3, fontWeight: 600 }}>{s.label} - {i.ts}</div>
+                  {i.text}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ VIEW NAVIGATION ============
+
+function ViewToggle({ mode, setMode }) {
+  const tabs = [
+    { id: "day",      label: "Day",       icon: "📅" },
+    { id: "week",     label: "Week",      icon: "🗓️" },
+    { id: "reengage", label: "Re-engage", icon: "↩" },
+  ];
+  return (
+    <div style={{ display: "inline-flex", padding: 3, background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: 11, gap: 2, boxShadow: CARD_SHADOW }}>
+      {tabs.map(({ id, label, icon }) => {
+        const active = mode === id;
+        return (
+          <button key={id} onClick={() => setMode(id)}
+            style={{ position: "relative", fontFamily: FONT_SANS, fontSize: 11, fontWeight: 600, padding: "5px 14px", borderRadius: 8, border: "none", background: "transparent", color: active ? C.blue : C.textMuted, cursor: "pointer", zIndex: 1, transition: "color 0.18s", display: "inline-flex", alignItems: "center", gap: 5 }}>
+            {active && (
+              <motion.span layoutId="view-pill"
+                style={{ position: "absolute", inset: 0, borderRadius: 8, background: C.surface, zIndex: -1, boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }}
+                transition={{ type: "spring", bounce: 0.18, duration: 0.34 }} />
+            )}
+            <span>{icon}</span> {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function DayNavigator({ selectedDayIso, setSelectedDayIso }) {
+  return (
+    <div style={{ display: "flex", gap: 0, marginBottom: 24, padding: 4, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, width: "fit-content", boxShadow: CARD_SHADOW }}>
+      {WEEK_DAYS.map((d) => {
+        const active = d.iso === selectedDayIso;
+        const isToday = d.iso === TODAY_ISO;
+        const callCount = (WEEK_PROSPECTS[d.iso] || []).filter((p) => !p.canceled).length;
+        return (
+          <button key={d.iso} onClick={() => setSelectedDayIso(d.iso)}
+            style={{ position: "relative", fontFamily: FONT_SANS, padding: "9px 18px", borderRadius: 10, border: "none", background: "transparent", color: active ? "#fff" : C.textMuted, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 76, zIndex: 1, transition: "color 0.2s ease" }}>
+            {active && (
+              <motion.span layoutId="day-nav-pill"
+                style={{ position: "absolute", inset: 0, borderRadius: 10, background: `linear-gradient(135deg, ${C.blue} 0%, #3b5bff 100%)`, zIndex: -1, boxShadow: "0 2px 8px rgba(89,112,255,0.35)" }}
+                transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} />
+            )}
+            <span style={{ fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
+              {d.short}
+              {isToday && <span style={{ width: 4, height: 4, borderRadius: "50%", background: active ? "rgba(255,255,255,0.9)" : C.emerald, display: "inline-block" }} />}
+            </span>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 9, opacity: 0.75, fontVariantNumeric: "tabular-nums" }}>
+              {d.dayNum} · {callCount}c
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function WeekDayColumn({ day, prospects, isToday }) {
+  const sorted = [...prospects].sort((a, b) => toMin(a.start) - toMin(b.start));
+  const active = sorted.filter((p) => !p.canceled);
+  const multi = active.filter((p) => p.multiAttendee).length;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+      <div style={{ padding: "10px 12px", background: isToday ? C.blueBg : C.surfaceAlt, border: `1px solid ${isToday ? C.blueBorder : C.border}`, borderRadius: "6px 6px 0 0", borderBottom: "none" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: isToday ? C.blue : C.text }}>{day.name}</span>
+          {isToday && <span style={{ fontFamily: FONT_MONO, fontSize: 8, fontWeight: 700, background: C.blue, color: "#FFF", padding: "1px 6px", borderRadius: 6, letterSpacing: 0.6 }}>TODAY</span>}
+        </div>
+        <div style={{ fontFamily: FONT_MONO, fontSize: 10, color: isToday ? C.blue : C.textMuted, marginBottom: 6 }}>
+          {day.dayNum} {day.monthShort}
+        </div>
+        <div style={{ display: "flex", gap: 8, fontFamily: FONT_MONO, fontSize: 9, color: C.textMuted, flexWrap: "wrap" }}>
+          <span><b style={{ color: C.blue }}>{active.length}</b> calls</span>
+          {multi > 0 && <span><b style={{ color: C.purple }}>{multi}</b> 👥</span>}
+        </div>
+      </div>
+      <div style={{ flex: 1, padding: 8, background: C.surfaceAlt, border: `1px solid ${isToday ? C.blueBorder : C.border}`, borderTop: "none", borderRadius: "0 0 6px 6px", minHeight: 200 }}>
+        {sorted.length === 0 ? (
+          <div style={{ padding: "20px 8px", textAlign: "center", fontFamily: FONT_MONO, fontSize: 10, color: C.textHint }}>No calls scheduled</div>
+        ) : (
+          sorted.map((m, i) => <WeekCard key={i} m={m} />)
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WeeklyView() {
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(180px, 1fr))", gap: 8, overflowX: "auto", paddingBottom: 8 }}>
+        {WEEK_DAYS.map((d) => (
+          <WeekDayColumn
+            key={d.iso}
+            day={d}
+            prospects={WEEK_PROSPECTS[d.iso] || []}
+            isToday={d.iso === TODAY_ISO}
+          />
+        ))}
+      </div>
+      <div style={{ marginTop: 14, padding: "10px 14px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 6, fontFamily: FONT_MONO, fontSize: 9, color: C.textHint, display: "flex", gap: 16, flexWrap: "wrap" }}>
+        <span><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: C.orange, marginRight: 5, verticalAlign: "middle" }} /> In HubSpot</span>
+        <span><span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: C.meet, marginRight: 5, verticalAlign: "middle" }} /> Meet link</span>
+        <span><span style={{ display: "inline-block", width: 8, height: 2, background: C.blue, marginRight: 5, verticalAlign: "middle" }} /> standard</span>
+        <span><span style={{ display: "inline-block", width: 8, height: 2, background: C.emerald, marginRight: 5, verticalAlign: "middle" }} /> SQL / has deal</span>
+        <span><span style={{ display: "inline-block", width: 8, height: 2, background: C.red, marginRight: 5, verticalAlign: "middle" }} /> hard-to-reach</span>
+        <span>Click <b>Day</b> toggle to drill in.</span>
+      </div>
+    </div>
+  );
+}
+
+// ============ RE-ENGAGE TAB ============
+
+function ReEngageCard({ m, doneSet, onToggleDone }) {
+  const [hov, setHov] = useState(false);
+  const [hovHS, setHovHS] = useState(false);
+
+  // Days since meeting - meetingIso is the calendar date of the meeting
+  const meetingMs = new Date((m.meetingIso || TODAY_ISO) + "T" + (m.start || "09:00") + ":00");
+  const daysSince = Math.max(0, Math.floor((Date.now() - meetingMs) / 86400000));
+
+  // Heat colors: yellow=fresh(<3d), orange(3-7d), red(8-14d), gray(>14d)
+  const heat =
+    daysSince < 3  ? { color: C.amber,   bg: C.amberBg,   border: C.amberBorder,   label: "HOT"   } :
+    daysSince < 8  ? { color: C.orange,  bg: C.orangeBg,  border: C.orangeBorder,  label: "WARM"  } :
+    daysSince < 15 ? { color: C.red,     bg: C.redBg,     border: C.redBorder,     label: "COLD"  } :
+                     { color: C.textMuted, bg: C.surfaceAlt, border: C.border,      label: "STALE" };
+
+  const isDone = doneSet.has(m.email);
+  const countryData = m.country ? COUNTRY_MAP[m.country.toLowerCase()] : null;
+  const statusStyle = m.leadStatus ? (STATUS_MAP[m.leadStatus] || null) : null;
+
+  // Meeting date display: "Tue 19 May · 09:30"
+  const meetingDateObj = new Date((m.meetingIso || TODAY_ISO) + "T12:00:00");
+  const meetingDateStr = meetingDateObj.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })
+    + " · " + (m.start || "");
+
+  return (
+    <div style={{
+      background: isDone ? C.surfaceAlt : C.surface,
+      border: `1px solid ${isDone ? C.border : (hov ? C.borderHover : C.border)}`,
+      borderRadius: 10, padding: "11px 14px", marginBottom: 7,
+      opacity: isDone ? 0.55 : 1, transition: "all 0.15s",
+      display: "flex", alignItems: "center", gap: 12,
+    }}
+      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+    >
+      {/* Heat badge */}
+      <div style={{ textAlign: "center", minWidth: 42, flexShrink: 0 }}>
+        <div style={{ fontFamily: FONT_MONO, fontSize: 10, fontWeight: 600, background: heat.bg, color: heat.color, border: `1px solid ${heat.border}`, borderRadius: 10, padding: "2px 6px", marginBottom: 2 }}>{daysSince}d</div>
+        <div style={{ fontFamily: FONT_MONO, fontSize: 8, color: heat.color, letterSpacing: 0.5 }}>{heat.label}</div>
+      </div>
+
+      {/* Info */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginBottom: 3 }}>
+          {m.name}
+          {countryData && <span style={{ fontSize: 12, marginLeft: 6 }}>{countryData.flag}</span>}
+          <span style={{ fontFamily: FONT_MONO, fontSize: 10, fontWeight: 400, color: C.textMuted, marginLeft: 8 }}>· {m.company}</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+          <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>{meetingDateStr}</span>
+          {statusStyle && (
+            <span style={{ fontFamily: FONT_MONO, fontSize: 9, padding: "1px 7px", borderRadius: 8, background: statusStyle.bg, color: statusStyle.color, border: `1px solid ${statusStyle.border}` }}>{statusStyle.label}</span>
+          )}
+          {m.seats && (
+            <span style={{ fontFamily: FONT_MONO, fontSize: 9, padding: "1px 7px", borderRadius: 8, background: C.surfaceAlt, color: C.textMuted, border: `1px solid ${C.border}` }}>{m.seats} seats</span>
+          )}
+        </div>
+      </div>
+
+      {/* Actions */}
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+        {m.hsLink && (
+          <a href={m.hsLink} target="_blank" rel="noreferrer"
+            onMouseEnter={() => setHovHS(true)} onMouseLeave={() => setHovHS(false)}
+            style={{ fontFamily: FONT_MONO, fontSize: 10, padding: "3px 10px", borderRadius: 5, border: `1px solid ${hovHS ? C.borderHover : C.border}`, background: hovHS ? C.surfaceAlt : C.surface, color: C.textMid, textDecoration: "none", transition: "all 0.12s", display: "inline-block" }}>
+            HS →
+          </a>
+        )}
+        <button onClick={() => onToggleDone(m.email)}
+          style={{ fontFamily: FONT_MONO, fontSize: 10, padding: "3px 10px", borderRadius: 5, border: `1px solid ${isDone ? C.emeraldBorder : C.border}`, background: isDone ? C.emeraldBg : C.surface, color: isDone ? C.emerald : C.textMuted, cursor: "pointer", transition: "all 0.12s" }}>
+          {isDone ? "✓ Done" : "Done"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ReEngageTab() {
+  const todayKey = "re-engage-done-" + TODAY_ISO;
+  const [done, setDone] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(todayKey) || "[]")); }
+    catch { return new Set(); }
+  });
+
+  const toggleDone = (email) => {
+    setDone(prev => {
+      const next = new Set(prev);
+      if (next.has(email)) next.delete(email); else next.add(email);
+      try { localStorage.setItem(todayKey, JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  };
+
+  const EXCLUDED = new Set(["Qualified"]);
+  const filterAndSort = (arr) =>
+    arr
+      .filter(m => m.leadStatus && !EXCLUDED.has(m.leadStatus))
+      .slice()
+      .sort((a, b) => {
+        const da = Math.max(0, Math.floor((Date.now() - new Date((a.meetingIso || TODAY_ISO) + "T" + (a.start || "09:00") + ":00")) / 86400000));
+        const db = Math.max(0, Math.floor((Date.now() - new Date((b.meetingIso || TODAY_ISO) + "T" + (b.start || "09:00") + ":00")) / 86400000));
+        return da - db; // freshest first
+      });
+
+  const getWeekRange = (arr) => {
+    if (!arr.length) return "";
+    const isos = arr.map(m => m.meetingIso).filter(Boolean).sort();
+    if (!isos.length) return "";
+    const fmt = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+    return isos[0] === isos[isos.length - 1] ? fmt(isos[0]) : fmt(isos[0]) + " – " + fmt(isos[isos.length - 1]);
+  };
+
+  const w1 = filterAndSort(LAST_WEEK_PROSPECTS);
+  const w2 = filterAndSort(TWO_WEEKS_AGO_PROSPECTS);
+  const hasAny = w1.length > 0 || w2.length > 0;
+
+  const SectionHeader = ({ label, dateRange, arr }) => {
+    const pending = arr.filter(m => !done.has(m.email)).length;
+    return (
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, marginTop: 4 }}>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 0.7, textTransform: "uppercase", color: C.textHint }}>{label}{dateRange ? " · " + dateRange : ""}</span>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, padding: "1px 9px", borderRadius: 8, background: C.blueBg, color: C.blue, border: `1px solid ${C.blueBorder}` }}>{pending} to reach out</span>
+      </div>
+    );
+  };
+
+  if (!hasAny) return (
+    <div style={{ padding: "40px 20px", textAlign: "center", background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 8 }}>
+      <div style={{ fontFamily: FONT_MONO, fontSize: 11, color: C.textMuted, marginBottom: 6 }}>No prospects to re-engage yet.</div>
+      <div style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textHint, lineHeight: 1.6 }}>This tab fills after the first morning refresh that pulls W-1 data.<br />Run "refresh my daily briefing" in Cowork to trigger it now.</div>
+    </div>
+  );
+
+  return (
+    <div>
+      {w1.length > 0 && (
+        <>
+          <SectionHeader label="Last week" dateRange={getWeekRange(LAST_WEEK_PROSPECTS)} arr={w1} />
+          {w1.map((m, i) => <ReEngageCard key={i} m={m} doneSet={done} onToggleDone={toggleDone} />)}
+        </>
+      )}
+      {w1.length > 0 && w2.length > 0 && (
+        <div style={{ height: 1, borderTop: `1px dashed ${C.border}`, margin: "20px 0" }} />
+      )}
+      {w2.length > 0 && (
+        <>
+          <SectionHeader label="Two weeks ago" dateRange={getWeekRange(TWO_WEEKS_AGO_PROSPECTS)} arr={w2} />
+          {w2.map((m, i) => <ReEngageCard key={i} m={m} doneSet={done} onToggleDone={toggleDone} />)}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ============ AGENDA SPINE ============
+// Proposal 01: vertical time-rail with NOW line, faded done events, emerald
+// next-glow. Merges prospects + other events chronologically, then bins them
+// into done / live / next / upcoming based on the wall clock.
+function AgendaSpine({ prospects, otherEvents, isToday, notes, setNotes, onOpenNotes, qualMap, setQualStatus }) {
+  const [nowMin, setNowMin] = useState(() => {
+    const d = new Date();
+    return d.getHours() * 60 + d.getMinutes();
+  });
+
+  useEffect(() => {
+    if (!isToday) return;
+    const id = setInterval(() => {
+      const d = new Date();
+      setNowMin(d.getHours() * 60 + d.getMinutes());
+    }, 30000);
+    return () => clearInterval(id);
+  }, [isToday]);
+
+  const items = useMemo(() => {
+    const a = prospects.map((m) => ({
+      type: "prospect", start: m.start, end: m.end,
+      startMin: toMin(m.start), endMin: toMin(m.end), data: m,
+    }));
+    const b = otherEvents.map((ev) => ({
+      type: "other", start: ev.start, end: ev.end,
+      startMin: toMin(ev.start), endMin: toMin(ev.end), data: ev,
+    }));
+    return [...a, ...b].sort((x, y) => x.startMin - y.startMin);
+  }, [prospects, otherEvents]);
+
+  // First non-done item is the "next" (only meaningful when not currently live).
+  let nextIdx = -1;
+  if (isToday) {
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].startMin > nowMin) { nextIdx = i; break; }
+    }
+  } else if (items.length > 0) {
+    nextIdx = 0;
+  }
+
+  function statusOf(item, idx) {
+    if (!isToday) return idx === 0 ? "next" : "upcoming";
+    if (item.endMin <= nowMin) return "done";
+    if (item.startMin <= nowMin && nowMin < item.endMin) return "live";
+    if (idx === nextIdx) return "next";
+    return "upcoming";
+  }
+
+  // Where to slot the horizontal NOW line: right after the last done item,
+  // unless we're currently inside a live one (then the live card carries the glow).
+  let nowInsertIdx = -1;
+  if (isToday && items.length > 0) {
+    let liveExists = false;
+    let lastDone = -1;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].startMin <= nowMin && nowMin < items[i].endMin) { liveExists = true; break; }
+      if (items[i].endMin <= nowMin) lastDone = i;
+    }
+    if (!liveExists) {
+      if (lastDone === -1 && items[0].startMin > nowMin) nowInsertIdx = 0;
+      else if (lastDone >= 0 && lastDone < items.length - 1) nowInsertIdx = lastDone + 1;
+    }
+  }
+
+  const nowHHMM = String(Math.floor(nowMin / 60)).padStart(2, "0") + ":" + String(nowMin % 60).padStart(2, "0");
+
+  if (items.length === 0) {
+    return (
+      <div style={{ padding: "24px 16px", background: C.surface, border: `1px dashed ${C.border}`, borderRadius: 6, fontFamily: FONT_MONO, fontSize: 11, color: C.textHint, textAlign: "center" }}>
+        Nothing scheduled.
+      </div>
+    );
+  }
+
+  return (
+    <AnimatePresence mode="wait">
+      <motion.div
+        key={items.map((i) => i.start + i.type).join("|")}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -6 }}
+        transition={{ duration: 0.22 }}
+        style={{ marginTop: 8 }}
+      >
+        {items.map((item, i) => {
+          const status = statusOf(item, i);
+          const isProspect = item.type === "prospect";
+          const dotColor =
+            status === "live" || status === "next" ? C.emerald :
+            status === "done" ? C.textHint : C.blue;
+          const timeColor =
+            status === "done" ? C.textHint :
+            status === "live" || status === "next" ? C.emerald : C.textMid;
+          const glow = status === "live" ? `0 0 14px ${C.emerald}` :
+                       status === "next" ? `0 0 8px ${C.emerald}AA` : "none";
+
+          return (
+            <div key={`${item.type}-${item.start}-${i}`}>
+              {nowInsertIdx === i && (
+                <div style={{ display: "grid", gridTemplateColumns: "62px 1fr", gap: 0, alignItems: "center", margin: "10px 0 18px" }}>
+                  <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.emerald, textAlign: "right", paddingRight: 14, fontWeight: 700, letterSpacing: 1.4 }}>NOW</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <motion.div
+                      animate={{ opacity: [0.5, 1, 0.5] }}
+                      transition={{ repeat: Infinity, duration: 2.2, ease: "easeInOut" }}
+                      style={{ width: 7, height: 7, borderRadius: "50%", background: C.emerald, boxShadow: `0 0 10px ${C.emerald}` }}
+                    />
+                    <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${C.emerald} 0%, ${C.emeraldBorder} 60%, transparent 100%)` }} />
+                    <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.emerald, fontWeight: 600, letterSpacing: 0.5 }}>{nowHHMM}</span>
+                  </div>
+                </div>
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: "62px 1fr", gap: 14, alignItems: "stretch", position: "relative" }}>
+                <div style={{ position: "relative", paddingTop: 16, borderRight: `1px solid ${status === "done" ? C.border : C.borderHover}` }}>
+                  <div style={{
+                    position: "absolute", top: 20, right: -5,
+                    width: 10, height: 10, borderRadius: "50%",
+                    background: dotColor, boxShadow: glow,
+                    border: `2px solid ${C.bg}`, zIndex: 2,
+                  }} />
+                  <div style={{ fontFamily: FONT_MONO, fontSize: 10, color: timeColor, textAlign: "right", paddingRight: 16, fontWeight: 600, letterSpacing: 0.5 }}>
+                    {item.start}
+                  </div>
+                  <div style={{ fontFamily: FONT_MONO, fontSize: 8, color: C.textHint, textAlign: "right", paddingRight: 16, marginTop: 2, letterSpacing: 0.3 }}>
+                    {item.end}
+                  </div>
+                </div>
+                <div style={{
+                  opacity: status === "done" ? 0.42 : 1,
+                  filter: status === "done" ? "saturate(0.55)" : "none",
+                  transition: "opacity 0.25s, filter 0.25s",
+                }}>
+                  {isProspect
+                    ? <ProspectCard m={item.data} notes={notes} setNotes={setNotes} onOpenNotes={onOpenNotes} index={i} qualStatus={qualMap?.[item.data.email]} setQualStatus={setQualStatus} />
+                    : <OtherCard ev={item.data} index={i} />}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+// ============ ROOT ============
+
+export default function DailyBriefing() {
+  const [notes, setNotes] = useState({});
+  const [activeNotes, setActiveNotes] = useState(null);
+  const [mode, setMode] = useState("day");
+  const [selectedDayIso, setSelectedDayIso] = useState(TODAY_ISO);
+  const [qualMap, setQualStatus] = useQualStatus();
+
+  const dayMeta = WEEK_DAYS.find((d) => d.iso === selectedDayIso) || WEEK_DAYS[0];
+  const dayProspects = WEEK_PROSPECTS[selectedDayIso] || [];
+  const dayOtherEvents = WEEK_OTHER_EVENTS[selectedDayIso] || [];
+  const active = dayProspects.filter((m) => !m.canceled);
+  const tally = qualTally(active, qualMap);
+  const other = [...dayOtherEvents].sort((a, b) => toMin(a.start) - toMin(b.start));
+  const isToday = selectedDayIso === TODAY_ISO;
+
+  return (
+    <div style={{
+      fontFamily: FONT_SANS,
+      minHeight: "100vh",
+      background: C.bg,
+      color: C.text,
+      position: "relative",
+      overflowX: "clip",
+    }}>
+      <AuroraBackdrop />
+
+      <div style={{
+        position: "relative",
+        zIndex: 10,
+        maxWidth: mode === "week" ? 1280 : 1180,
+        margin: "0 auto",
+        padding: "44px 24px 80px",
+        transition: "max-width 0.2s ease",
+      }}>
+
+        {/* HUD HEADER - bento header card */}
+        <GlassCard tier={1} padding="22px 26px" radius={18} style={{ marginBottom: 22 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14 }}>
+            <div style={{ minWidth: 0 }}>
+              <HudLabel variant="eyebrow" dot="iris">CloudTalk · Daily Briefing</HudLabel>
+              <div style={{ marginTop: 10 }}><Greeting /></div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <ViewToggle mode={mode} setMode={setMode} />
+              {mode === "day" && <NotificationToggle prospects={dayProspects} />}
+              <HudLabel variant="eyebrow" dot="success">Live · GCal + HubSpot</HudLabel>
+              <GlowButton variant="ghost" size="sm" onClick={() => window.location.reload()}>↻ Reload</GlowButton>
+            </div>
+          </div>
+        </GlassCard>
+
+        <NeonDivider tone="iris" glow style={{ marginBottom: 26 }} />
+
+        {/* DAY MODE - cockpit two-column bento */}
+        {mode === "day" && (
+          <motion.div
+            initial="hidden"
+            animate="show"
+            variants={{ show: { transition: { staggerChildren: 0.06, delayChildren: 0.04 } } }}
+            style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 26 }}
+          >
+            {/* MAIN COLUMN */}
+            <motion.div variants={FADE_UP} style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+              <DayNavigator selectedDayIso={selectedDayIso} setSelectedDayIso={setSelectedDayIso} />
+
+              {isToday && (
+                <>
+                  <NowIndicator prospects={dayProspects} />
+                  <Timeline prospects={dayProspects} otherEvents={dayOtherEvents} />
+                </>
+              )}
+
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14, marginTop: 4, flexWrap: "wrap", gap: 8 }}>
+                <HudLabel variant="eyebrow" dot="iris">Agenda spine</HudLabel>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.emerald }}>{tally.qualified} demo</span>
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.amber }}>{tally.working} working</span>
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.red }}>{tally.qualified_out} out</span>
+                  <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textMuted }}>{tally.pending} pending</span>
+                  <HudLabel variant="eyebrow">
+                    {active.length} discovery {other.length > 0 ? `· ${other.length} other` : ""}
+                  </HudLabel>
+                </div>
+              </div>
+              <AgendaSpine
+                key={selectedDayIso}
+                prospects={active}
+                otherEvents={other}
+                isToday={isToday}
+                notes={notes}
+                setNotes={setNotes}
+                onOpenNotes={setActiveNotes}
+                qualMap={qualMap}
+                setQualStatus={setQualStatus}
+              />
+
+              {isToday && <DayStats prospects={dayProspects} />}
+            </motion.div>
+
+            {/* RIGHT RAIL - sticky */}
+            <motion.div variants={FADE_UP} style={{ minWidth: 0 }}>
+              <div style={{ position: "sticky", top: 24, display: "flex", flexDirection: "column", gap: 18 }}>
+              {/* Day status card (hero in the rail) */}
+              <GlassCard tier={2} tilt sheen padding={20} radius={16} glow={isToday ? "iris" : null}>
+                <HudLabel variant="eyebrow" dot={isToday ? "iris" : null}>
+                  {isToday ? "Today" : "Selected day"}
+                </HudLabel>
+                <div style={{
+                  marginTop: 10,
+                  fontFamily: FONT_DISPLAY,
+                  fontSize: 24,
+                  fontWeight: 600,
+                  color: C.text,
+                  letterSpacing: 0.2,
+                  textShadow: "0 0 16px rgba(107,91,255,0.25)",
+                }}>
+                  {dayMeta.name} {dayMeta.dayNum} {dayMeta.monthShort}
+                </div>
+                <div style={{ marginTop: 14, display: "flex", gap: 18, flexWrap: "wrap" }}>
+                  <RailStat label="Discovery" value={active.length} tone="iris" />
+                  <RailStat label="Other"     value={other.length}  tone="cyan" />
+                </div>
+                {!isToday && (
+                  <div style={{ marginTop: 12, ...TYPE.monoDetail, fontStyle: "italic", color: COLOR.text.hint }}>
+                    HubSpot enrichment runs the morning of
+                  </div>
+                )}
+              </GlassCard>
+
+              {isToday && <Progress prospects={dayProspects} />}
+              {isToday && <OpenSlots prospects={dayProspects} otherEvents={dayOtherEvents} />}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* WEEK MODE */}
+        {mode === "week" && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20, flexWrap: "wrap" }}>
+              <HudLabel variant="eyebrow" dot="iris">
+                Week of {WEEK_DAYS[0].dayNum}-{WEEK_DAYS[WEEK_DAYS.length - 1].dayNum} {WEEK_DAYS[0].monthShort} · {Object.values(WEEK_PROSPECTS).reduce((acc, arr) => acc + arr.filter((p) => !p.canceled).length, 0)} calls
+              </HudLabel>
+              <span style={{ ...TYPE.monoDetail, color: COLOR.text.hint }}>Toggle to Day for live timeline + notes</span>
+            </div>
+            <WeeklyView />
+          </>
+        )}
+
+        {/* RE-ENGAGE MODE */}
+        {mode === "reengage" && (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20, flexWrap: "wrap" }}>
+              <HudLabel variant="eyebrow" dot="warn">Re-engage · W-1 + W-2 · unqualified only</HudLabel>
+              <span style={{ ...TYPE.monoDetail, color: COLOR.text.hint }}>Yellow = freshest. Mark Done once you've reached out.</span>
+            </div>
+            <ReEngageTab />
+          </>
+        )}
+
+        {/* Footer */}
+        <NeonDivider tone="ink" style={{ marginTop: 40, marginBottom: 16 }} />
+        <div style={{ ...TYPE.monoDetail, color: COLOR.text.hint, letterSpacing: 1, lineHeight: 1.6 }}>
+          {REFRESHED_AT} · {OWNER.email} · Auto-refresh weekdays at 07:30
+        </div>
+      </div>
+
+      {activeNotes && (
+        <LiveNotesModal
+          prospect={activeNotes}
+          notes={notes}
+          setNotes={setNotes}
+          onClose={() => setActiveNotes(null)}
+        />
+      )}
+    </div>
+  );
+}

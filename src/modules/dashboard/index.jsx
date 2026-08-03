@@ -56,66 +56,6 @@ const Icon = {
       <path d="M18 4l1 2 2 1-2 1-1 2-1-2-2-1 2-1z" />
     </svg>
   ),
-  roadmap: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 21V4M6 4h11l-2 3.5L17 11H6" />
-    </svg>
-  ),
-  pipeline: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 5h16l-5 7v6l-6 2v-8z" />
-    </svg>
-  ),
-  library: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 4h6v16H4zM10 4h4v16h-4zM16 6l4 1-3 14-4-1z" />
-    </svg>
-  ),
-  quotes: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2v20M17 6H9.5a3 3 0 0 0 0 6h5a3 3 0 0 1 0 6H6" />
-    </svg>
-  ),
-  battlecards: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3l8 4v5c0 4-3.5 7.5-8 9-4.5-1.5-8-5-8-9V7z" />
-      <path d="M9 12l2 2 4-4" />
-    </svg>
-  ),
-  email: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <path d="M3 7l9 7 9-7" />
-    </svg>
-  ),
-  demos: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="13" rx="2" />
-      <path d="M9 21h6M12 17v4M10 8l4 2.5L10 13z" />
-    </svg>
-  ),
-  review: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.7L12 16.9 6.8 19l1-5.7L3.5 9.2l5.9-.9z" />
-    </svg>
-  ),
-  activity: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 12h4l3-8 4 16 3-8h4" />
-    </svg>
-  ),
-  wiki: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 5a2 2 0 0 1 2-2h10l4 4v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
-      <path d="M8 9h6M8 13h8M8 17h5" />
-    </svg>
-  ),
-  stale: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 12a9 9 0 1 0 3-6.7" />
-      <path d="M3 4v4h4M12 7v5l3 2" />
-    </svg>
-  ),
 };
 
 // Tiles are the shared registry plus this file's SVG icons. Icon keys match

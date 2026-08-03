@@ -9,19 +9,8 @@ import CalculatorModule from "./modules/calculator/index.jsx";
 import CompetitorModule from "./modules/competitor/index.jsx";
 import PerformanceModule from "./modules/performance/index.jsx";
 import CoachModule from "./modules/coach/index.jsx";
-import PipelineModule from "./modules/pipeline/index.jsx";
-import RoadmapModule from "./modules/roadmap/index.jsx";
 import SelfServedModule from "./modules/selfserved/index.jsx";
 import { onboardingAlertCount } from "./modules/selfserved/data.js";
-import LibraryModule from "./modules/library/index.jsx";
-import QuotesModule from "./modules/quotes/index.jsx";
-import BattlecardsModule from "./modules/battlecards/index.jsx";
-import EmailModule from "./modules/email/index.jsx";
-import DemosModule from "./modules/demos/index.jsx";
-import ReviewModule from "./modules/review/index.jsx";
-import ActivityModule from "./modules/activity/index.jsx";
-import WikiModule from "./modules/wiki/index.jsx";
-import StaleModule from "./modules/stale/index.jsx";
 
 // Module metadata comes from lib/modules.js; only the component binding lives
 // here, because that is the one field that needs the imports above.
@@ -31,20 +20,9 @@ const COMPONENTS = {
   calculator: CalculatorModule,
   performance: PerformanceModule,
   selfserved: SelfServedModule,
-  roadmap: RoadmapModule,
   coach: CoachModule,
   precall: PreCallModule,
   competitor: CompetitorModule,
-  pipeline: PipelineModule,
-  library: LibraryModule,
-  quotes: QuotesModule,
-  battlecards: BattlecardsModule,
-  email: EmailModule,
-  demos: DemosModule,
-  review: ReviewModule,
-  activity: ActivityModule,
-  wiki: WikiModule,
-  stale: StaleModule,
 };
 
 const NAV = MODULES.map((m) => ({ ...m, component: COMPONENTS[m.id] }));
@@ -230,16 +208,6 @@ export default function Shell() {
                     </span>
                   </span>
                 )}
-                {!collapsed && item.status === "stub" && (
-                  <span style={{
-                    fontFamily: FONT_MONO, fontSize: 9,
-                    color: C.amber, background: C.amberBg,
-                    border: `1px solid ${C.amberBorder}`,
-                    padding: "1px 5px", borderRadius: 3, letterSpacing: 0.5,
-                  }}>
-                    SOON
-                  </span>
-                )}
                 {navAlert && (
                   <span
                     title={`${ssAlertCount} self-served onboarding alert${ssAlertCount === 1 ? "" : "s"} - open Self-Served`}
@@ -261,16 +229,6 @@ export default function Shell() {
                     width: 6, height: 6, borderRadius: "50%",
                     background: C.emerald, boxShadow: `0 0 6px ${C.emerald}`,
                   }} />
-                )}
-                {!collapsed && item.status === "embed" && (
-                  <span style={{
-                    fontFamily: FONT_MONO, fontSize: 9,
-                    color: C.cyan, background: C.cyanBg,
-                    border: `1px solid ${C.cyanBorder}`,
-                    padding: "1px 5px", borderRadius: 3, letterSpacing: 0.5,
-                  }}>
-                    EMBED
-                  </span>
                 )}
               </button>
             );
@@ -414,7 +372,6 @@ function CommandPalette({ nav, activeId, onSelect, onClose }) {
                   <span style={{ fontSize: 11, color: C.textHint, fontFamily: FONT_MONO, marginLeft: 8 }}>{n.sub}</span>
                 </span>
                 {isActive && <span style={{ fontSize: 10, fontFamily: FONT_MONO, color: C.emerald }}>current</span>}
-                {n.status === "stub" && <span style={{ fontSize: 9, fontFamily: FONT_MONO, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBorder}`, padding: "1px 5px", borderRadius: 3 }}>SOON</span>}
               </button>
             );
           })}

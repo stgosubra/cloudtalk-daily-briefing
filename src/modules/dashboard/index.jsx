@@ -18,35 +18,16 @@ const Icon = {
       <path d="M12 7v5l3 2" />
     </svg>
   ),
-  precall: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 6h13l3 3v9H4z" />
-      <path d="M8 11h8M8 14h5" />
-    </svg>
-  ),
   calculator: (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
       <rect x="5" y="3" width="14" height="18" rx="2" />
       <path d="M8 7h8M8 11h2M12 11h2M16 11h0M8 15h2M12 15h2M16 15h0M8 19h2M12 19h2M16 19h0" />
     </svg>
   ),
-  competitor: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="3" />
-      <circle cx="12" cy="12" r="8" />
-      <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-    </svg>
-  ),
   performance: (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 18l5-6 4 3 6-9" />
       <path d="M14 6h4v4" />
-    </svg>
-  ),
-  coach: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3a4 4 0 0 0-4 4v3a4 4 0 0 0 8 0V7a4 4 0 0 0-4-4z" />
-      <path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />
     </svg>
   ),
   selfserved: (

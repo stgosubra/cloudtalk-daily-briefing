@@ -4,11 +4,8 @@ import { MODULES } from "./lib/modules.js";
 
 import DashboardModule from "./modules/dashboard/index.jsx";
 import BriefingModule from "./modules/briefing/index.jsx";
-import PreCallModule from "./modules/precall/index.jsx";
 import CalculatorModule from "./modules/calculator/index.jsx";
-import CompetitorModule from "./modules/competitor/index.jsx";
 import PerformanceModule from "./modules/performance/index.jsx";
-import CoachModule from "./modules/coach/index.jsx";
 import SelfServedModule from "./modules/selfserved/index.jsx";
 import { onboardingAlertCount } from "./modules/selfserved/data.js";
 
@@ -20,9 +17,6 @@ const COMPONENTS = {
   calculator: CalculatorModule,
   performance: PerformanceModule,
   selfserved: SelfServedModule,
-  coach: CoachModule,
-  precall: PreCallModule,
-  competitor: CompetitorModule,
 };
 
 const NAV = MODULES.map((m) => ({ ...m, component: COMPONENTS[m.id] }));
@@ -280,9 +274,6 @@ const ACTIONS = [
   { kind: "action", id: "performance", label: "My numbers this period",   sub: "Performance", accent: "emerald", intent: { module: "performance", tab: "period" } },
   { kind: "action", id: "performance", label: "Performance progression",  sub: "Performance", accent: "emerald", intent: { module: "performance", tab: "progression" } },
   { kind: "action", id: "performance", label: "SQO value by geo",         sub: "Performance", accent: "emerald", intent: { module: "performance", tab: "geo" } },
-  { kind: "action", id: "competitor", label: "Run a competitor brief",    sub: "Competitor", accent: "red",     intent: { module: "competitor" } },
-  { kind: "action", id: "precall",    label: "Generate a pre-call brief", sub: "Pre-Call SE", accent: "blue",   intent: { module: "precall" } },
-  { kind: "action", id: "coach",      label: "Coach me on my numbers",    sub: "Sales Coach", accent: "blue",   intent: { module: "coach" } },
 ];
 
 function CommandPalette({ nav, activeId, onSelect, onClose }) {

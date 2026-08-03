@@ -122,7 +122,7 @@ export default function DashboardModule({ onNavigate }) {
         <div style={{
           marginTop: 14, fontSize: 16, color: C.textMuted, maxWidth: 620, lineHeight: 1.5,
         }}>
-          Your constellation - 18 modules, 7 live. Pick a star to dive in.
+          Your constellation - {TILES.length} {TILES.length === 1 ? "module" : "modules"}. Pick a star to dive in.
         </div>
       </div>
 

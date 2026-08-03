@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { C, FONT_SANS, FONT_MONO, FONT_DISPLAY, OWNER } from "./lib/palette";
 import { MODULES } from "./lib/modules.js";
-import { staleModules } from "./lib/freshness.js";
+import { staleModules, declaredGaps } from "./lib/freshness.js";
 
 import DashboardModule from "./modules/dashboard/index.jsx";
 import BriefingModule from "./modules/briefing/index.jsx";
@@ -258,6 +258,7 @@ export default function Shell() {
       {/* CONTENT */}
       <main style={{ flex: 1, minWidth: 0 }}>
         <StalenessBanner />
+        <DataGapsBanner />
         <ActiveComponent intent={intent} onNavigate={(id) => setActiveId(id)} />
       </main>
 
@@ -295,6 +296,36 @@ function StalenessBanner() {
       <span>
         Not refreshed today: {stale.map(describe).join(", ")}. Run the{" "}
         <code style={{ fontFamily: FONT_MONO, fontSize: 11 }}>briefing-daily</code> refresh.
+      </span>
+    </div>
+  );
+}
+
+// Gaps a refresh chose to declare instead of inventing a value for. Amber, not
+// red: the data is current, one figure just carries a caveat. Separate banner so a
+// declared caveat is never mistaken for a stale module.
+function DataGapsBanner() {
+  const gaps = declaredGaps();
+  if (gaps.length === 0) return null;
+
+  return (
+    <div style={{
+      display: "flex", alignItems: "flex-start", gap: 10,
+      padding: "10px 22px",
+      background: "rgba(212, 160, 60, 0.09)",
+      borderBottom: `1px solid rgba(212, 160, 60, 0.28)`,
+      fontSize: 12, color: C.text,
+    }}>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.amber, letterSpacing: 0.6, paddingTop: 1 }}>
+        GAPS
+      </span>
+      <span>
+        {gaps.map((g, i) => (
+          <span key={i} style={{ display: "block" }}>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textMuted }}>{g.num}</span>{" "}
+            {g.text}
+          </span>
+        ))}
       </span>
     </div>
   );

@@ -42,6 +42,35 @@ export function staleModules(now = new Date()) {
   }).map((s) => ({ ...s, days: s.stamp ? daysStale(s.stamp, now) : null }));
 }
 
+// Gaps a refresh declared rather than filled. The guardrail is "declare gaps, do
+// not invent values", which only works if a declared gap is actually seen - and
+// generator stdout is not seen on an unattended run. So the payload carries them
+// and they surface in the Shell.
+//
+// Optional chaining throughout: a data.js written before these fields existed
+// yields undefined and contributes nothing, rather than crashing the app.
+export function declaredGaps() {
+  const out = [];
+  const perf = performanceData.PERFORMANCE;
+
+  for (const g of perf?.dataGaps ?? []) {
+    out.push({ num: "03", label: "Performance", text: g });
+  }
+  // MQL YTD is an independent distinct-contact COUNT, not a sum of the monthly
+  // buckets, so a small drift is expected rather than a bug. Worth seeing, not
+  // worth blocking - which is why the generator checks it is declared exactly and
+  // then lets the run through.
+  if (typeof perf?.mqlYtdDrift === "number" && perf.mqlYtdDrift !== 0) {
+    const d = perf.mqlYtdDrift;
+    out.push({
+      num: "03",
+      label: "Performance",
+      text: `MQL YTD is ${d > 0 ? `${d} above` : `${Math.abs(d)} below`} the sum of its monthly buckets (independent COUNTs, expected drift)`,
+    });
+  }
+  return out;
+}
+
 export function freshnessFor(id, now = new Date()) {
   const src = SOURCES.find((s) => s.id === id);
   if (!src) return null;

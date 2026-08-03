@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { C, FONT_SANS, FONT_MONO, FONT_DISPLAY, OWNER } from "./lib/palette";
 import { MODULES } from "./lib/modules.js";
+import { staleModules } from "./lib/freshness.js";
 
 import DashboardModule from "./modules/dashboard/index.jsx";
 import BriefingModule from "./modules/briefing/index.jsx";
@@ -256,12 +257,45 @@ export default function Shell() {
 
       {/* CONTENT */}
       <main style={{ flex: 1, minWidth: 0 }}>
+        <StalenessBanner />
         <ActiveComponent intent={intent} onNavigate={(id) => setActiveId(id)} />
       </main>
 
       {paletteOpen && (
         <CommandPalette nav={NAV} activeId={activeId} onSelect={goTo} onClose={() => setPaletteOpen(false)} />
       )}
+    </div>
+  );
+}
+
+// The daily refresh is a scheduled Claude task that fires on machine wake, so a
+// missed or failed morning is possible. When that happens the dashboard would
+// otherwise show yesterday's numbers with no visible difference - which is the
+// dangerous case, because the numbers still look plausible. This makes it loud.
+function StalenessBanner() {
+  const stale = staleModules();
+  if (stale.length === 0) return null;
+
+  const describe = (m) => {
+    if (m.days == null) return `${m.num} ${m.label} (age unknown)`;
+    return `${m.num} ${m.label} (${m.days === 1 ? "1 day" : `${m.days} days`} old)`;
+  };
+
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10,
+      padding: "10px 22px",
+      background: "rgba(220, 90, 90, 0.10)",
+      borderBottom: `1px solid rgba(220, 90, 90, 0.30)`,
+      fontSize: 12, color: C.text,
+    }}>
+      <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.red, letterSpacing: 0.6 }}>
+        STALE
+      </span>
+      <span>
+        Not refreshed today: {stale.map(describe).join(", ")}. Run the{" "}
+        <code style={{ fontFamily: FONT_MONO, fontSize: 11 }}>briefing-daily</code> refresh.
+      </span>
     </div>
   );
 }

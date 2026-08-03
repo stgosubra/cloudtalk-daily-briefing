@@ -25,6 +25,8 @@ Wraps **modules 01, 03 (Performance), 04 (Self-Served)** at the trigger. Present
 | 03 Performance | `performance` | HubSpot | `/hs` (server-side GROUP BY aggregation) |
 | 04 Self-Served | `selfserved` | HubSpot | `/hs` + per-contact deal-association check |
 
+**Order is a hard gate, not a preference.** `briefing/data.js` must be written and verified by `gen-briefing.mjs` before the first module 03 or 04 query is issued. Module 01 briefs calls happening within hours; 03 and 04 are trend data that tolerate a day of staleness. A run that burns its first stretch on YTD aggregations and then dies has failed at the only thing that could not wait. A failed 01 therefore stops the run; a failed 03 continues to 04.
+
 The other two surviving modules pull nothing: 00 Dashboard derives its tiles from the registry, 02 Calculator is pure client-side computation. Pre-Call SE now lives outside this app (`cloudtalk-precall-se/`, entered via the `pcb-cloudtalk` skill); Coach and Competitor were removed.
 
 ## `/hs` discipline (modules 03 and 04)
@@ -34,6 +36,20 @@ The other two surviving modules pull nothing: 00 Dashboard derives its tiles fro
 - Supported: `DATE_TRUNC`, `COUNT(*)`, `SUM`, `GROUP BY`, `BETWEEN`, cross-object `OBJECT.property`.
 - Not supported: `DISTINCT`, `CASE`, column aliases, `JOIN`, `HAVING`.
 
+### One query per metric, spanning the whole window
+
+Each metric is **one** aggregation covering every month at once - `GROUP BY <dimension>, DATE_TRUNC('month', <date>)` with a single `BETWEEN` over the full window. Never loop a query per month.
+
+A per-month loop returns byte-identical output at 8x the round-trips, and nothing downstream would catch it: the reconciliation gates check arithmetic, not how the numbers were fetched. This rule is the only thing standing between a 25-call run and a 200-call one. The geo-matrix example below is the canonical shape - copy its structure for every metric.
+
+### Parallelize the aggregations
+
+The module 03 metrics have no interdependencies. Issue them in parallel batches (4-6 concurrent; HubSpot's per-portal concurrency limit is not documented here, so stay conservative rather than discovering it mid-run) instead of one at a time. A run is latency-bound on round-trips, not on HubSpot's aggregation work.
+
+This is a correctness measure as much as a speed one. `gen-performance.mjs` documents a known MQL drift whose stated cause is two counts "pulled moments apart" - independent `COUNT`s against a moving pipeline. Compressing the pull into a tight window shrinks that skew. A snapshot should be a snapshot.
+
+Exception: the Step 0 preflight stays strictly sequential. Its purpose is attributing a stall to a specific connector, which parallel calls destroy.
+
 ---
 
 ## Module 01 - Today / Schedule
@@ -42,7 +58,7 @@ File: `src/modules/briefing/data.js`. Component (`BriefingModule.jsx`) is never 
 
 ### What gets regenerated each run
 
-- Date constants: `TODAY_ISO`, `TODAY_LABEL`, `REFRESHED_AT`, `WEEK_DAYS` (Mon-Sat of the current week).
+- Date constants: `TODAY_ISO`, `TODAY_LABEL`, `REFRESHED_AT`, `WEEK_DAYS` (Mon-Fri of the current week - working week only, no weekend columns). Derived from `src/lib/dates.js`; never hand-typed.
 - `WEEK_PROSPECTS[TODAY_ISO]` = array of prospect cards for today.
 - `WEEK_OTHER_EVENTS[TODAY_ISO]` = array of non-meeting calendar blocks for today.
 - Historical week arrays (`LAST_WEEK_PROSPECTS`, `TWO_WEEKS_AGO_PROSPECTS`, prior-day arrays) are **not** refreshed - they are frozen history.
@@ -51,10 +67,14 @@ File: `src/modules/briefing/data.js`. Component (`BriefingModule.jsx`) is never 
 
 Use `Claude_in_Chrome` (`tabs_context_mcp` -> `navigate` to Google Calendar day view for `TODAY_ISO` -> `get_page_text`). `Control_Chrome` is unreliable in this environment (read/exec fail with "Chrome not running"); prefer Claude_in_Chrome.
 
-Per event extract: attendee display name + email, `start`, `end` (HH:MM), Google Meet link, RSVP status, canceled flag. Classify each event:
+Per event extract: attendee display name + email, `start`, `end` (HH:MM), **meeting link**, RSVP status, canceled flag. Classify each event:
 
 - Has an external attendee / is a prospect call -> prospect card.
 - Personal / internal block (gym, lunch, AFK, sport) -> other event.
+
+**Meeting links are not HubSpot-scoped.** Pull the join link for *every* event that has one, whatever its provider and whoever created it - Google Meet, Zoom, Teams, Whereby, a raw dial-in URL in the location field or pasted in the description. Do not restrict this to HubSpot-booked meetings, and do not drop the link just because the event classified as an "other event": an internal sync or a partner call is exactly the kind of block where a one-click join is the whole point.
+
+Both classifications carry it under the same key, `meetLink`, so the UI needs no branch. Look in this order: the event's conferencing entry, then `location`, then the first URL in the description. No link found -> `meetLink: null`, never a guessed or reconstructed URL.
 
 ### Step 2 - HubSpot enrichment (per attendee)
 
@@ -67,6 +87,12 @@ Ambiguity rule: if the calendar gives only a first name and HubSpot returns mult
 ### Step 3 - Gmail (browser)
 
 Last email thread with the attendee -> `lastEmail` (subject + date + 1-line gist). If Gmail is not reachable this run, set `lastEmail: null` (the card render guards on null). Do not block the refresh on Gmail.
+
+**Draft language.** The card's Gmail button opens a pre-filled "I'm on the call, are you joining?" draft. It is localised off the contact's `country`: **Spain -> Spanish, France -> French, everything else -> English.** Copy is written natively per language (FR vouvoiement and French question/colon spacing; ES tuteo, the norm in Spanish B2B SaaS), not machine-translated from the English.
+
+This keys on **country, not on the card's sales region**. The regions would mistranslate - Portugal is region `ES` without being Spanish-speaking, Morocco and Belgium are region `FR`. English is the deliberate fallback for every other country: a machine-translated Dutch or Italian draft reads worse than a clean English one.
+
+The copy lives in `DRAFT_COPY` in `BriefingModule.jsx` (component-side, not generated), so a refresh only needs to pull `country` correctly in Step 2 - it never writes email copy into `data.js`.
 
 ### Step 3b - Lusha enrichment (always run, every card, carryover and new)
 
@@ -88,7 +114,9 @@ Prospect card:
   lastEmail }
 ```
 
-Other event: `{ emoji, name, start, end, color, note? }`.
+Other event: `{ emoji, name, start, end, color, note?, meetLink? }`.
+
+`meetLink` on an other event is rendered as a join button by `BriefingModule.jsx` (Meet and Zoom are labelled distinctly, anything else falls back to a generic join). Omit the key or set it `null` when the event has no link.
 
 `HS(id)` is defined locally in `data.js` (full contact URL, no `OWNER` dependency).
 
@@ -127,6 +155,8 @@ File: `src/modules/performance/data.js`. Single export `PERFORMANCE`. All counts
 - `funnel` (MQL by month; SQL/SQO/rejected/pending + value by seat tier by month; AI vs core by month).
 - `metrics` (week + month headline), `mqlToSql`, `progression[]`.
 - `rejectedByOwner[]`, `mqlGeo[]` + `mqlGeoTotal`, `segmentSplit`, `segmentMonthly[]`, `geo[]` + `geoTotal`.
+- `mqlYtdDrift` - **required number.** `funnel.mql.ytd` minus the sum of the monthly MQL buckets. Declare it even when it is `0`. MQL YTD is its own distinct-contact `COUNT`, not a decomposition of the months, so a small drift is expected and must not abort the run - but it must not be invisible either. `gen-performance.mjs` checks the declared value for exactness, then lets the run through, and `src/lib/freshness.js` renders any non-zero drift in the Shell's amber GAPS banner. This replaces a `console.warn` that nobody reads on an unattended run.
+- `dataGaps` - **required array of strings**, empty when there are none. The home for anything the run declared rather than filled: a connector that did not answer, a field HubSpot returned null for, a count pulled at a different moment. Also rendered in the GAPS banner. Empty must be an explicit `[]` so "no gaps" is a statement, not an omission.
 - **Geo matrix** `byCountry`: `{ [country]: [{ month, label, mql, sql, sqo, rejected }] }` for each funnel month. This is the live geo re-pull the full-refresh standing instruction requires every run. Drive it from three GROUP BY queries (country x DATE_TRUNC month) for SQL, SQO, Rejected, plus the MQL contact count by country.
 
 ### Query pattern (geo matrix example)

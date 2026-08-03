@@ -154,6 +154,20 @@ function QualStatusPills({ value, onChange }) {
   );
 }
 
+// Join-link provider, from the URL alone. The refresh pulls meetLink for EVERY
+// calendar event that has one, not just HubSpot-booked Google Meets, so the button
+// must not label a Zoom or Teams URL "Join Google Meet". Unknown providers get a
+// neutral link glyph rather than a wrong-but-confident one.
+//
+// Shared by both render sites (prospect card + other event) so the two cannot drift.
+function meetProvider(url) {
+  if (/zoom\.us/i.test(url))                     return { initials: "Z",  color: C.blue,    label: "Join Zoom" };
+  if (/meet\.google\.com/i.test(url))            return { initials: "GM", color: C.meet,    label: "Join Google Meet" };
+  if (/teams\.(microsoft|live)\.com/i.test(url)) return { initials: "T",  color: C.cyan,    label: "Join Microsoft Teams" };
+  if (/whereby\.com/i.test(url))                 return { initials: "W",  color: C.purple,  label: "Join Whereby" };
+  return { initials: "↗", color: C.textMuted, label: "Join meeting" };
+}
+
 // Circular monogram action button: futuristic, minimal, ≥36px tap target.
 // Used in ProspectCard's action row to replace rectangular HubSpot/Meet/Notes buttons.
 // `as="a"` for hrefs, plain button otherwise. Optional `count` shows a corner badge.
@@ -249,6 +263,74 @@ function RailStat({ label, value, tone = "iris" }) {
       </span>
     </div>
   );
+}
+
+const SCHEDULER_URL = "https://scheduler.default.com/833/member/01d4ab6d-fbb1-4437-8545-938e2057c5de";
+
+// Language of the "are you joining?" Gmail draft, from the contact's country.
+//
+// Keyed on COUNTRY, not on COUNTRY_MAP's `region`. Those regions are sales
+// territories and would mistranslate: Portugal is region ES but not Spanish-
+// speaking, Morocco and Belgium are region FR. Only Spain and France get a
+// localised draft; everything else defaults to English, which is the honest
+// fallback - a machine-translated Dutch or Italian draft reads worse than a
+// clean English one.
+function draftLang(country) {
+  const c = (country || "").trim().toLowerCase();
+  if (c === "spain") return "es";
+  if (c === "france") return "fr";
+  return "en";
+}
+
+// One copy set per language, written natively rather than translated from the
+// English: FR uses vouvoiement and French question/colon spacing, ES uses tuteo,
+// which is the norm in Spanish B2B SaaS. Edit copy here, not at the call site.
+const DRAFT_COPY = {
+  en: {
+    subject: "Following up on our scheduled call - CloudTalk",
+    greeting: (n) => `Hi ${n},`,
+    joining: "I am connected in the meeting right now - will you be joining?",
+    reschedule: "If you'd like to reschedule, please let me know what works for you, or feel free to book a new time directly here:",
+    closing: "Look forward to speaking with you.",
+    signoff: "Thanks,",
+  },
+  fr: {
+    subject: "Notre rendez-vous du jour - CloudTalk",
+    greeting: (n) => `Bonjour ${n},`,
+    joining: "Je suis connecté à la réunion en ce moment - allez-vous nous rejoindre ?",
+    reschedule: "Si vous préférez reporter, indiquez-moi vos disponibilités, ou réservez directement un nouveau créneau ici :",
+    closing: "Au plaisir d'échanger avec vous.",
+    signoff: "Bien à vous,",
+  },
+  es: {
+    subject: "Nuestra reunión de hoy - CloudTalk",
+    greeting: (n) => `Hola ${n},`,
+    joining: "Estoy conectado en la reunión ahora mismo, ¿te unes?",
+    reschedule: "Si prefieres reprogramarla, dime qué horario te viene bien, o reserva directamente un nuevo hueco aquí:",
+    closing: "Quedo a la espera de hablar contigo.",
+    signoff: "Un saludo,",
+  },
+};
+
+// Gmail compose deep-link for the "I'm on the call, are you?" nudge.
+function composeUrl(m, firstName) {
+  const t = DRAFT_COPY[draftLang(m.country)];
+  const body = [
+    t.greeting(firstName),
+    "",
+    t.joining,
+    m.meetLink ? "" : null,
+    m.meetLink ? m.meetLink : null,
+    "",
+    t.reschedule,
+    "",
+    SCHEDULER_URL,
+    "",
+    t.closing,
+    "",
+    t.signoff,
+  ].filter((l) => l !== null).join("\n");
+  return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(m.email)}&su=${encodeURIComponent(t.subject)}&body=${encodeURIComponent(body)}`;
 }
 
 const COUNTRY_MAP = {
@@ -828,23 +910,7 @@ function ProspectCard({ m, notes, setNotes, onOpenNotes, index, qualStatus, setQ
   const lineCount = (notes[`${m.email}::lines`] || []).length;
   const rawFirstName = (m.name || "there").split(/\s+/)[0];
   const firstName = rawFirstName.charAt(0).toUpperCase() + rawFirstName.slice(1);
-  const gmailSubject = "Following up on our scheduled call - CloudTalk";
-  const gmailBody = [
-    `Hi ${firstName},`,
-    "",
-    "I am connected in the meeting right now - will you be joining?",
-    m.meetLink ? "" : null,
-    m.meetLink ? m.meetLink : null,
-    "",
-    "If you'd like to reschedule, please let me know what works for you, or feel free to book a new time directly here:",
-    "",
-    "https://scheduler.default.com/833/member/01d4ab6d-fbb1-4437-8545-938e2057c5de",
-    "",
-    "Look forward to speaking with you.",
-    "",
-    "Thanks,",
-  ].filter((l) => l !== null).join("\n");
-  const gmailComposeUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(m.email)}&su=${encodeURIComponent(gmailSubject)}&body=${encodeURIComponent(gmailBody)}`;
+  const gmailComposeUrl = composeUrl(m, firstName);
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -917,10 +983,13 @@ function ProspectCard({ m, notes, setNotes, onOpenNotes, index, qualStatus, setQ
             ) : (
               <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>Not in HubSpot</span>
             )}
-            {m.meetLink && (
-              <MonogramButton initials="GM" color={C.meet}
-                href={m.meetLink} ariaLabel="Join Google Meet" title="Join Google Meet" />
-            )}
+            {m.meetLink && (() => {
+              const p = meetProvider(m.meetLink);
+              return (
+                <MonogramButton initials={p.initials} color={p.color}
+                  href={m.meetLink} ariaLabel={p.label} title={p.label} />
+              );
+            })()}
             <MonogramButton initials="LV" color={C.purple}
               onClick={() => onOpenNotes && onOpenNotes(m)}
               ariaLabel="Open Live Notes"
@@ -994,11 +1063,10 @@ function OtherCard({ ev, index }) {
         <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>{ev.name}</span>
         {ev.note && <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>{ev.note}</span>}
         {ev.meetLink && (() => {
-          const isZoom = /zoom\.us/.test(ev.meetLink);
+          const p = meetProvider(ev.meetLink);
           return (
-            <MonogramButton initials={isZoom ? "Z" : "GM"} color={isZoom ? C.blue : C.meet} size={30}
-              href={ev.meetLink} ariaLabel={isZoom ? "Join Zoom" : "Join Google Meet"}
-              title={isZoom ? "Join Zoom" : "Join Google Meet"} />
+            <MonogramButton initials={p.initials} color={p.color} size={30}
+              href={ev.meetLink} ariaLabel={p.label} title={p.label} />
           );
         })()}
       </div>

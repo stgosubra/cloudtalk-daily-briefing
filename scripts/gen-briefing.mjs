@@ -33,7 +33,7 @@ const HEADER = `// Daily Brief - module 01 (Today / Schedule) data.
 // (BriefingModule.jsx) is never touched by a refresh.
 //
 // Each refresh regenerates today's slice: TODAY_ISO, TODAY_LABEL, REFRESHED_AT,
-// WEEK_DAYS (Mon-Sat), and WEEK_PROSPECTS[TODAY] / WEEK_OTHER_EVENTS[TODAY].
+// WEEK_DAYS (Mon-Fri), and WEEK_PROSPECTS[TODAY] / WEEK_OTHER_EVENTS[TODAY].
 // Historical week arrays are frozen history, carried forward unchanged.
 // Prospect-card prose (companyBrief, challengerInsight, qualifierQuestions) is
 // regenerated from the freshly pulled facts each run; lastEmail is null when Gmail
@@ -71,7 +71,9 @@ function reconcile(mod, meta) {
     throw new Error("WEEK_DAYS does not match weekDays(TODAY_ISO) from src/lib/dates.js");
   }
 
-  // 3. WEEK_PROSPECTS / WEEK_OTHER_EVENTS keyed by exactly the 6 week days.
+  // 3. WEEK_PROSPECTS / WEEK_OTHER_EVENTS keyed by exactly the week days weekDays()
+  //    returns (Mon-Fri). Derived, not a literal, so narrowing the week in dates.js
+  //    tightens this gate with it instead of leaving a stale count behind.
   const weekIsos = wd.map((d) => d.iso);
   for (const mapName of ["WEEK_PROSPECTS", "WEEK_OTHER_EVENTS"]) {
     const keys = Object.keys(E[mapName]).sort();

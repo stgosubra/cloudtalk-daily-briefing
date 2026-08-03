@@ -1,7 +1,9 @@
 # Daily Briefing Revamp - Structure, Self-Update, Single Skill
 
 Date: 2026-08-03
-Status: approved design, not yet implemented
+Status: implemented 2026-08-03. Phases 1-3 done. One prerequisite outstanding -
+the `briefing-daily` task must be run manually once to bank its tool approvals
+before the unattended schedule can be relied on (see Risks).
 Owner: Santiago Subra
 
 ## Goal

@@ -215,6 +215,7 @@ shadow copy is the same class of problem, noted but deferred.
 | Deletions remove something still wanted | Per-step approval, clean branch, sequenced so each step builds |
 | Pre-Call capability lost with the UI | Demote rather than delete; `cloudtalk-precall-se/` and `pcb-cloudtalk` retained |
 | Task fires late or not at all | Accepted. In-app staleness warning surfaces it |
+| Task stalls on a tool permission prompt instead of failing | Tool approvals are stored per task once granted. The task must be run manually once to pre-approve every connector it touches before relying on it unattended |
 | Skill and repo spec drift | Same-commit contract stated above |
 | PII exposure | Counts-only reports. `data.js` stays gitignored and local. No hosting in scope |
 

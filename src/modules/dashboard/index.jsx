@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { C, FONT_SANS, FONT_MONO, FONT_DISPLAY, OWNER } from "../../lib/palette.js";
 import { TODAY_ISO, WEEK_PROSPECTS, WEEK_OTHER_EVENTS } from "../briefing/data.js";
+import { TILE_MODULES } from "../../lib/modules.js";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constellation Grid - Dashboard landing
@@ -11,7 +12,7 @@ import { TODAY_ISO, WEEK_PROSPECTS, WEEK_OTHER_EVENTS } from "../briefing/data.j
 
 // Monoline icons - 22px, stroke-only, single path style for visual coherence
 const Icon = {
-  today: (
+  briefing: (
     <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7v5l3 2" />
@@ -117,29 +118,14 @@ const Icon = {
   ),
 };
 
-// Module signals - tiles show one live metric line. Pulled inline so the
-// dashboard never blocks on async data; richer per-module data still lives
-// inside each module.
-const TILES = [
-  { id: "briefing",    num: "01", label: "Today",       sub: "Schedule",         accent: "blue",    icon: Icon.today,       signal: null,                  live: true,  primary: true },
-  { id: "calculator",  num: "02", label: "Calculator",  sub: "Minutes / cost",   accent: "blue",    icon: Icon.calculator,  signal: "Cost - Minutes",     live: true },
-  { id: "performance", num: "03", label: "Performance", sub: "SQL / SQO",        accent: "emerald", icon: Icon.performance, signal: "SQL / SQO tracker",  live: true },
-  { id: "selfserved",  num: "04", label: "Self-Served", sub: "Untouched MQLs",   accent: "emerald", icon: Icon.selfserved,  signal: "Re-engage cohort",   live: true },
-  { id: "roadmap",     num: "05", label: "Roadmap",     sub: "Reserved slot",    accent: "purple",  icon: Icon.roadmap },
-  { id: "coach",       num: "06", label: "Sales Coach", sub: "AI coaching",      accent: "blue",    icon: Icon.coach,       signal: "Coach session",      live: true },
-  { id: "precall",     num: "07", label: "Pre-Call SE", sub: "Brief generator",  accent: "blue",    icon: Icon.precall,     signal: "Generate brief",     live: true },
-  { id: "competitor",  num: "08", label: "Competitor",  sub: "Move tracker",     accent: "red",     icon: Icon.competitor,  signal: "Aircall - Dialpad",  live: true },
-  { id: "pipeline",    num: "09", label: "Pipeline",    sub: "Cockpit",          accent: "blue",    icon: Icon.pipeline },
-  { id: "library",     num: "10", label: "Library",     sub: "Past discoveries", accent: "purple",  icon: Icon.library },
-  { id: "quotes",      num: "11", label: "Quotes",      sub: "ROI calculator",   accent: "amber",   icon: Icon.quotes },
-  { id: "battlecards", num: "12", label: "Battlecards", sub: "Static cards",     accent: "red",     icon: Icon.battlecards },
-  { id: "email",       num: "13", label: "Email",       sub: "Triage + draft",   accent: "cyan",    icon: Icon.email },
-  { id: "demos",       num: "14", label: "Demos",       sub: "Sandbox state",    accent: "meet",    icon: Icon.demos },
-  { id: "review",      num: "15", label: "Review",      sub: "Call scoring",     accent: "orange",  icon: Icon.review },
-  { id: "activity",    num: "16", label: "Activity",    sub: "Cross-tool feed",  accent: "cyan",    icon: Icon.activity },
-  { id: "wiki",        num: "17", label: "Wiki",        sub: "Knowledge base",   accent: "purple",  icon: Icon.wiki },
-  { id: "stale",       num: "18", label: "Stale Leads", sub: "Re-engage",        accent: "amber",   icon: Icon.stale },
-];
+// Tiles are the shared registry plus this file's SVG icons. Icon keys match
+// module ids, so the lookup needs no special cases. `signal` is static metadata
+// from the registry; module 01's is computed at render time (see todaySignal).
+const TILES = TILE_MODULES.map((m) => ({
+  ...m,
+  icon: Icon[m.id],
+  live: m.status === "live",
+}));
 
 function formatToday() {
   const d = new Date();

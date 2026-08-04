@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { C, FONT_SANS, FONT_MONO, FONT_DISPLAY, OWNER } from "./lib/palette";
+import { C, FONT_SANS, FONT_MONO, FONT_DISPLAY } from "./lib/palette";
+import { PROFILE } from "./config.js";
 import { MODULES } from "./lib/modules.js";
 import { staleModules, declaredGaps } from "./lib/freshness.js";
 
@@ -244,12 +245,12 @@ export default function Shell() {
             display: "flex", alignItems: "center", justifyContent: "center",
             flexShrink: 0,
           }}>
-            SS
+            {PROFILE.initials}
           </div>
           {!collapsed && (
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 12, color: C.text, fontWeight: 500 }}>{OWNER.name}</div>
-              <div style={{ fontSize: 10, color: C.textHint, fontFamily: FONT_MONO }}>SE - EMEA</div>
+              <div style={{ fontSize: 12, color: C.text, fontWeight: 500 }}>{PROFILE.name}</div>
+              <div style={{ fontSize: 10, color: C.textHint, fontFamily: FONT_MONO }}>{PROFILE.title}</div>
             </div>
           )}
         </div>

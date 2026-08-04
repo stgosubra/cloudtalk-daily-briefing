@@ -15,16 +15,17 @@
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { runGenerator, assertShape, expectEqual, sumBy, readText } from "./lib/refresh-core.mjs";
+import { PROFILE, PORTAL_ID } from "../src/config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_PATH = resolve(__dirname, "../src/modules/selfserved/data.js");
 
-const HEADER = `// Self-Served Tracker - live pull for Santiago Subra (HubSpot ownerId 87191703).
-// Source of truth = HubSpot, portal 6195055. MACHINE-GENERATED each refresh by
+const HEADER = `// Self-Served Tracker - live pull for ${PROFILE.name} (HubSpot ownerId ${PROFILE.ownerId}).
+// Source of truth = HubSpot, portal ${PORTAL_ID}. MACHINE-GENERATED each refresh by
 // scripts/gen-selfserved.mjs (Option A: Claude pulls via /hs, no stored token).
 //
 // Cohort (all must hold):
-//   - hubspot_owner_id = 87191703
+//   - hubspot_owner_id = ${PROFILE.ownerId}
 //   - hs_lead_status != 'Qualified'
 //   - account_became_active within the rolling 90-day window
 //   - contact has zero OPEN and zero CLOSED-WON deals (closed-lost -> RE-ENGAGE)

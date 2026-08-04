@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence, useSpring, useTransform } from "framer-motion";
 import { AuroraBackdrop, GlassCard, GlowButton, NeonDivider, HudLabel } from "../../design/primitives/index.js";
 import { COLOR, TYPE } from "../../design/tokens.js";
+import { OWNER } from "../../config.js";
 import {
   TODAY_LABEL,
   REFRESHED_AT,
@@ -13,12 +14,6 @@ import {
   WEEK_OTHER_EVENTS,
 } from "./data.js";
 
-const OWNER = {
-  name: "Santiago Subra",
-  ownerId: 87191703,
-  portalId: 6195055,
-  email: "santiago.subra@cloudtalk.io",
-};
 const FIRST_NAME = OWNER.name.split(" ")[0];
 
 

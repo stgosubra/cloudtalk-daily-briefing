@@ -16,18 +16,19 @@
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { runGenerator, assertShape, expectEqual, sumBy, readText } from "./lib/refresh-core.mjs";
+import { PROFILE, POINTS_QUOTA_PER_MONTH } from "../src/config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_PATH = resolve(__dirname, "../src/modules/performance/data.js");
 
-const HEADER = `// Performance metrics snapshot for Santiago Subra (HubSpot ownerId 87191703).
+const HEADER = `// Performance metrics snapshot for ${PROFILE.name} (HubSpot ownerId ${PROFILE.ownerId}).
 // Source of truth = HubSpot. MACHINE-GENERATED each refresh by
 // scripts/gen-performance.mjs (Option A: Claude pulls via /hs, no stored token).
 //
 // Definitions (matched to the portal's saved SQL/SQO reports, deal-based):
-//   SQL = deal_creator__sdr_only_ = 87191703, bucketed by createdate.
+//   SQL = deal_creator__sdr_only_ = ${PROFILE.ownerId}, bucketed by createdate.
 //   SQO = + deal_accepted_by_ae = true.
-//   points = deal_sdr_points_number (90/mo = 100% = EUR 1,933.33; 1 pt = EUR 21.48),
+//   points = deal_sdr_points_number (${POINTS_QUOTA_PER_MONTH}/mo = 100%),
 //            credited in the month the deal is ACCEPTED (accepted_deal__date_time_).
 //   AI deal = va_point >= 1. Won = dealstage 6607659.
 //   seats tier (discovery_call__seats): micro 1-10, senior_micro 11-20, smb 21-50, mm 51-100, enterprise 101+.

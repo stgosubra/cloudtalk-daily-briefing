@@ -1,89 +1,73 @@
-# CloudTalk Daily Briefing
+# CloudTalk Cockpit - daily briefing dashboard
 
-A personal daily briefing dashboard for CloudTalk built on top of [Claude Cowork](https://claude.ai).
+A local dashboard for a CloudTalk SDR/SE. Four modules: today's calls, a
+minutes/cost calculator, SQL/SQO performance, and a self-served re-engagement
+cohort. It runs on your own machine, pulls from your own HubSpot, and refreshes
+itself on weekday mornings.
 
-Pulls today's prospect calls from Google Calendar, joins them with live HubSpot data (lead status, seats, country, phone), enriches each card with the latest Gmail thread signal, and renders a hot-reloading React dashboard at `localhost:5173`. Auto-refreshes every weekday morning via a scheduled task.
+## Installing it
 
-![Dashboard preview](docs/preview.png)
+Ask Claude Code, in a folder you are happy to install into:
 
-## What you get
+> import https://github.com/stgosubra/cloudtalk-cockpit and install it
 
-- Chronological view of every external prospect call for the week
-- Per-card: HubSpot link, Meet join button, lead status badge, RSVP badge, local-time display
-- Gmail thread signal per prospect (last email subject, snippet, date)
-- Challenger insight + qualifier questions per prospect, generated once and cached
-- Day/week toggle, timeline, open-slot finder
-- Browser notifications 5 min before each call
-- Automated morning refresh at 8am weekdays (no manual action needed)
+Claude reads `skill/install/SKILL.md` and does the rest. It will ask you four
+short questions - your name, your initials, your job title, and your HubSpot
+owner ID - and handle everything else.
 
-## Requirements
+You will have to do exactly three things yourself:
 
-Before installing, you need:
+1. Have **Node.js** installed. If you do not, get the LTS build from nodejs.org
+   first.
+2. **Approve four connector prompts** - Google Calendar, HubSpot, Gmail and
+   Lusha - once each. The dashboard pulls your pipeline with your own access;
+   there are no shared credentials anywhere in this repo.
+3. **Click "Run now" once** on the scheduled task after it is created. A brand
+   new task has no approvals banked yet, and without one manual run its first
+   automatic fire can quietly do nothing.
 
-- **[Claude desktop](https://claude.ai/download)** with Cowork mode enabled
-- **Google Calendar** connector connected in Cowork
-- **Gmail** connector connected in Cowork
-- **HubSpot** connector connected in Cowork
-- **Node.js 18+** installed on your machine ([download here](https://nodejs.org))
-
-## Install
-
-### Step 1 — Add this marketplace to Cowork
-
-1. Open Claude desktop → Settings → Plugins
-2. Click **Add marketplace**
-3. Paste this URL: `https://github.com/stgosubra/cloudtalk-daily-briefing`
-4. Find **CloudTalk Daily Briefing** in the list and click **Install**
-
-### Step 2 — Run the setup skill
-
-In any Cowork chat, say:
-
-```
-set up daily briefing
-```
-
-The skill will auto-detect your identity from HubSpot (name, email, ownerId, portalId, timezone), ask you to confirm, then:
-- Copy the React/Vite app into the folder you choose (default: `~/Desktop/daily-briefing`)
-- Write your personal `config.json`
-- Create the morning scheduled task (8am weekdays)
-
-### Step 3 — Start the dashboard
-
-```bash
-cd ~/Desktop/daily-briefing   # or whatever folder you chose
-npm install
-npm run dev
-```
-
-Open `http://localhost:5173` in your browser and allow notifications when prompted.
-
-Leave the tab open. The dashboard auto-refreshes every weekday morning at 8am.
-
-## Manual refresh
-
-At any time, say in Cowork:
-
-```
-refresh my daily briefing
-```
+Everything else is automated.
 
 ## How it works
 
-| Component | Role |
-|---|---|
-| `briefing-setup` skill | One-time setup. Copies the Vite scaffold, writes `config.json`, creates the cron task. |
-| `briefing-refresh` skill | Morning data pull. Reads `config.json`, fetches Calendar + HubSpot + Gmail, rewrites `src/App.jsx`. |
-| `assets/` | React/Vite scaffold template (copied to your machine during setup). |
+There is no server and no database. Each weekday morning a scheduled Claude task
+pulls Calendar, HubSpot, Gmail and Lusha, and writes three data files through
+validating generators in `scripts/`. The React app just renders those files. If
+a morning is missed, the app says so with a STALE banner rather than quietly
+showing yesterday's numbers as today's.
 
-## Troubleshooting
+Module 01 runs first as a hard gate. It briefs calls happening in the next few
+hours, so if it fails the run stops rather than burying the failure under two
+successful reports.
 
-**"config.json missing"** — Run `set up daily briefing` in Cowork first.
+## Your data stays yours
 
-**Dashboard not updating** — Make sure `npm run dev` is still running and the browser tab is open.
+The generated files under `src/modules/*/data.js` contain live customer names,
+emails and phone numbers. They are gitignored and never leave your machine.
+Nothing in this repository contains customer data - the committed
+`data.seed.js` files are structurally identical but completely empty, and exist
+only so a fresh clone builds before the first refresh.
 
-**Connectors not found** — Go to Settings → Connections in Claude and verify Google Calendar, Gmail, and HubSpot are all connected.
+`src/config.js` is gitignored for the same reason at a smaller scale - it is the
+only file holding your real name, work email and HubSpot owner ID. The tracked
+template is `src/config.example.js`, and it is all placeholders.
 
-## Author
+Do not commit a `data.js` or a `config.js`, and do not copy either from a
+colleague.
 
-Santiago Subra 
+## Day to day
+
+- `npm run dev` - open the dashboard
+- ask Claude to run `briefing-daily` - refresh now instead of waiting
+- `npm run seed` - restore empty data files if one is deleted
+- `npm run make-seeds` - regenerate the seeds after changing a payload shape
+
+`REFRESH_SPEC.md` is the source of truth for every metric definition, cohort
+rule and validation gate. Read it before changing anything a generator writes.
+
+## Per-person settings
+
+`src/config.js` holds the one block that differs between installs - name,
+initials, title, owner ID. Portal ID and points quota are shared and should stay
+identical for everyone. It is created from `src/config.example.js` on
+`npm install` and never tracked.

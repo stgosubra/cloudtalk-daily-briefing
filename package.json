@@ -4,6 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "postinstall": "node scripts/seed-data.mjs",
+    "seed": "node scripts/seed-data.mjs",
+    "make-seeds": "node scripts/make-seeds.mjs",
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",

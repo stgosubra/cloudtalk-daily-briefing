@@ -26,9 +26,6 @@ export const FONT_SANS = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI'
 export const FONT_MONO = "'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace";
 export const FONT_DISPLAY = "'Rubik', 'Inter', sans-serif";
 
-export const OWNER = {
-  name: "Santiago Subra",
-  ownerId: 87191703,
-  portalId: 6195055,
-  email: "santiago.subra@cloudtalk.io",
-};
+// Re-exported from src/config.js so existing `import { OWNER } from "../lib/palette.js"`
+// callers keep working while identity stays declared in exactly one place.
+export { OWNER } from "../config.js";

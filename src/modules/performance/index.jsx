@@ -4,8 +4,9 @@ import {
   useSpring, useTransform,
 } from "framer-motion";
 import { PERFORMANCE, GEO_MONTHLY, PROGRESSION_GEO } from "./data.js";
+import { PROFILE, PORTAL_ID, POINTS_QUOTA_PER_MONTH, OWNER_IDS } from "../../config.js";
 
-// ─── Present mode: mask contractual figures (€ commission, 80-pt quota) ──────
+// ─── Present mode: mask contractual figures (€ commission, points quota) ─────
 const MaskCtx = createContext(false);
 const useMasked = () => useContext(MaskCtx);
 const MASK = "•••";
@@ -215,7 +216,7 @@ export default function PerformanceModule({ intent }) {
         {/* ── Source footnote ─────────────────────────────────────────── */}
         <div style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO, marginTop: 28, lineHeight: 1.6, borderTop: `1px solid ${C.line}`, paddingTop: 14 }}>
           SQL = deals where deal_creator = {p.owner} (ownerId {p.ownerId}), by create date. SQO = deal_accepted_by_ae = Yes.<br />
-          Points = deal_sdr_points_number. 80 pts/month = 100% = {present ? MASK : eur(p.pacing.fullCommission)}. Source: HubSpot 6195055.
+          Points = deal_sdr_points_number. {POINTS_QUOTA_PER_MONTH} pts/month = 100% = {present ? MASK : eur(p.pacing.fullCommission)}. Source: HubSpot {PORTAL_ID}.
         </div>
       </div>
     </div>
@@ -371,6 +372,11 @@ function PacingView({ p }) {
   const ahead = remaining <= 0;
   const acc = p.acceptance;
   const pointSeries = p.points.map((m) => m.points);
+  // Divisor for the points bars and the dashed target line. `target` comes from
+  // p.pacing above, which a freshly installed dashboard reports as 0 alongside an
+  // all-zero pointSeries - and 0/0 puts NaN into a CSS `top`. The trailing 1
+  // keeps the divisor positive until the first refresh lands real numbers.
+  const maxPoints = Math.max(target, ...pointSeries, 1);
 
   const stalls = p.stalls
     .map((s) => ({ ...s, ageH: hoursSince(s.createdate, now) }))
@@ -408,7 +414,7 @@ function PacingView({ p }) {
               <div style={{ fontSize: 11, color: C.faint, fontFamily: MONO, marginTop: 4 }}>
                 {masked
                   ? `${earned} pts · commission hidden`
-                  : `${earned} pts × ${eur(pointValue)} · full month (80 pts) = ${eur(fullCommission)}`}
+                  : `${earned} pts × ${eur(pointValue)} · full month (${POINTS_QUOTA_PER_MONTH} pts) = ${eur(fullCommission)}`}
               </div>
             </div>
             <div style={{ height: 1, background: C.line }} />
@@ -532,23 +538,21 @@ function PacingView({ p }) {
       {/* Points MoM trend */}
       <div style={card}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <div style={label}>Points per month · vs {masked ? "" : "80 "}target</div>
+          <div style={label}>Points per month · vs {masked ? "" : `${target} `}target</div>
           <div style={{ fontSize: 11, color: C.faint, fontFamily: MONO }}>{p.points.reduce((a, m) => a + m.points, 0)} pts YTD</div>
         </div>
         <div style={{ display: "flex", alignItems: "flex-end", gap: 16, height: 130, padding: "16px 4px 0", position: "relative" }}>
           {/* target line */}
           {(() => {
-            const maxP = Math.max(target, ...pointSeries);
-            const targetY = 100 - (target / maxP) * 100;
+            const targetY = 100 - (target / maxPoints) * 100;
             return (
               <div style={{ position: "absolute", left: 0, right: 0, top: 16 + targetY, borderTop: `1px dashed ${C.amber}`, opacity: 0.5 }}>
-                <span style={{ position: "absolute", right: 0, top: -14, fontSize: 9, color: C.amber, fontFamily: MONO }}>{masked ? "target" : "target 80"}</span>
+                <span style={{ position: "absolute", right: 0, top: -14, fontSize: 9, color: C.amber, fontFamily: MONO }}>{masked ? "target" : `target ${target}`}</span>
               </div>
             );
           })()}
           {p.points.map((m, ri) => {
-            const maxP = Math.max(target, ...pointSeries);
-            const h = (m.points / maxP) * 100;
+            const h = (m.points / maxPoints) * 100;
             const hit = m.points >= target;
             return (
               <div key={m.month} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
@@ -1479,7 +1483,7 @@ function ClosedByOwnerCard({ closedByOwner, monthFilter, geoFilter, closedRows, 
                   display: "flex", justifyContent: "space-between", alignItems: "center",
                   padding: "6px 10px", background: C.surf, borderRadius: 7, border: `1px solid ${C.line}`,
                 }}>
-                  <span style={{ fontSize: 12.5, color: o.name === "Santiago Subra" ? C.blue : C.txt, fontWeight: o.name === "Santiago Subra" ? 600 : 400 }}>
+                  <span style={{ fontSize: 12.5, color: o.name === PROFILE.name ? C.blue : C.txt, fontWeight: o.name === PROFILE.name ? 600 : 400 }}>
                     {o.name}
                   </span>
                   <div style={{ display: "flex", gap: 14, fontFamily: MONO, fontSize: 11 }}>
@@ -1496,19 +1500,6 @@ function ClosedByOwnerCard({ closedByOwner, monthFilter, geoFilter, closedRows, 
   );
 }
 
-const OWNER_IDS = {
-  "Santiago Subra":          87191703,
-  "Jody Barrett":            83328722,
-  "Laurent Bélanger-Lowe":   760537593,
-  "Nicholas Agafitei":       78465113,
-  "Emma Orozco":             792312489,
-  "Federico Mambelli":       84123102,
-  "Konstantin Vasilopoulos": 687799059,
-  "Chris Hoang":             41215078,
-  "Ludwig Engel":            631363412,
-  "Bradford Ord-Hume":       1223800630,
-  "Louis Lebegue":           90353641,
-};
 
 // Build a HubSpot deal-list URL filtered to a given AE's rejected deals.
 // HubSpot stores deal_accepted_by_ae as 'true'/'false' (Yes/No labels).
@@ -1521,7 +1512,7 @@ function hubspotRejectedUrl(name) {
     { property: "deal_creator__sdr_only_", operator: "EQ", value: String(ownerId) },
     { property: "deal_accepted_by_ae",     operator: "EQ", value: "false" },
   ];
-  return `https://app.hubspot.com/contacts/6195055/objects/0-3/views/all/list?filters=${encodeURIComponent(JSON.stringify(filters))}`;
+  return `https://app.hubspot.com/contacts/${PORTAL_ID}/objects/0-3/views/all/list?filters=${encodeURIComponent(JSON.stringify(filters))}`;
 }
 
 function RejectedByOwnerCard({ rejectedByOwner, monthFilter }) {
@@ -1549,7 +1540,7 @@ function RejectedByOwnerCard({ rejectedByOwner, monthFilter }) {
                 const url = hubspotRejectedUrl(o.name);
                 const inner = (
                   <>
-                    <span style={{ fontSize: 12.5, color: o.name === "Santiago Subra" ? C.blue : C.txt, fontWeight: o.name === "Santiago Subra" ? 600 : 400 }}>
+                    <span style={{ fontSize: 12.5, color: o.name === PROFILE.name ? C.blue : C.txt, fontWeight: o.name === PROFILE.name ? 600 : 400 }}>
                       {o.name}
                     </span>
                     <div style={{ display: "flex", gap: 14, fontFamily: MONO, fontSize: 11 }}>

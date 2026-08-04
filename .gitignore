@@ -18,6 +18,15 @@ coverage/
 *.key
 credentials*.json
 *token*
+# The `*token*` rule above is for secrets. This one file is the design system
+# (colours, type scale, z-index) and is imported by the whole component tree,
+# so a clone will not build without it. Narrow exception, not a weakening.
+!src/design/tokens.js
+
+# === Per-operator identity (never commit) ===
+# Real name, work email, HubSpot owner id. src/config.example.js is the tracked
+# template; npm postinstall copies it here on a fresh clone.
+src/config.js
 
 # === App config (operator-specific, not shared) ===
 config.json

@@ -8,10 +8,15 @@ There is no token-based path. `scripts/refresh-perf.mjs` was deleted: it hardcod
 
 ## Identity and shared constants
 
-- Owner: Santiago Subra
-- `hubspot_owner_id` = 87191703
-- HubSpot portal = 6195055
-- Email: santiago.subra@cloudtalk.io
+Per-operator values are **not written here**. They live in `src/config.js`
+(gitignored, created from `src/config.example.js` at install) and, for the
+refresh runtime, in `~/.claude/skills/briefing-daily/config.local.json`. Read
+them from there; never inline an owner id into a query.
+
+- Owner: `PROFILE.name`
+- `hubspot_owner_id` = `PROFILE.ownerId`
+- Email: `PROFILE.email`
+- HubSpot portal = 6195055 (shared)
 - Contact-record URL: `https://app.hubspot.com/contacts/6195055/record/0-1/{hsObjectId}`
 - Deal-record URL: `https://app.hubspot.com/contacts/6195055/record/0-2/{dealId}`
 
@@ -137,7 +142,7 @@ File: `src/modules/performance/data.js`. Single export `PERFORMANCE`. All counts
 
 ### Metric definitions (deal-based, matched to portal reports)
 
-- **SQL** = deals Santiago created: `deal_creator__sdr_only_` = 87191703, bucketed by deal `createdate`.
+- **SQL** = deals the operator created: `deal_creator__sdr_only_` = `<ownerId>`, bucketed by deal `createdate`.
 - **SQO** = SQLs accepted by an AE: + `deal_accepted_by_ae` = true.
 - **Rejected** = `deal_accepted_by_ae` = No, bucketed by `rejected_deal_timestamp`.
 - **Points** = `deal_sdr_points_number` (seats_points + va_point). 90 pts/month = 100% = EUR 1,933.33; 1 pt = EUR 21.48. Quota was raised from 80 to 90 on 2026-07-22 - `scripts/gen-performance.mjs` and `performance/data.js` already carry 90; do not reintroduce 80. Credited in the month the deal is **accepted** (`accepted_deal__date_time_`), not created.
@@ -166,7 +171,7 @@ One aggregation per metric, grouped by country and month:
 ```
 SELECT country, DATE_TRUNC('month', createdate) AS m, COUNT(*)
 FROM deals
-WHERE deal_creator__sdr_only_ = 87191703
+WHERE deal_creator__sdr_only_ = <ownerId>
   AND createdate BETWEEN <window_start> AND <window_end>
 GROUP BY country, m
 ```
@@ -181,7 +186,7 @@ File: `src/modules/selfserved/data.js`. Single export `SELFSERVED` (+ `onboardin
 
 ### Cohort (all must hold)
 
-- `hubspot_owner_id` = 87191703
+- `hubspot_owner_id` = `<ownerId>`
 - `hs_lead_status` != 'Qualified' (already-qualified leads are being worked / have a deal)
 - `account_became_active` within the rolling 90-day window
 - contact has **zero open** and **zero closed-won** deals (closed-lost is allowed -> flagged RE-ENGAGE)

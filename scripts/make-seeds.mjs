@@ -117,6 +117,31 @@ export const LAST_WEEK_PROSPECTS = [];
 export const TWO_WEEKS_AGO_PROSPECTS = [];
 `;
 
+// Same class of problem as module 01, one level down. The skeletoniser zeroes
+// `pacing.target`, but a fresh install does not have a zero target - it has the
+// monthly quota, with nothing earned against it yet. `earned / target` is then
+// 0/0, and that NaN reaches a rendered string ("need NaN/workday"). Zeroing
+// `pacing.today` has the same effect on the workday derivation.
+//
+// So the seed restates the two facts that are true of any install regardless of
+// data: the quota is the quota, and today is today. Both are pure derivation -
+// no HubSpot, no PII - and deriving the date at import time keeps the seed
+// correct on whatever day someone installs rather than freezing the
+// seed-authoring date into the repo.
+const PERFORMANCE_TAIL = `
+import { POINTS_QUOTA_PER_MONTH } from "../../config.js";
+
+const _now = new Date();
+const _pad = (n) => String(n).padStart(2, "0");
+const _y = _now.getUTCFullYear();
+const _m = _now.getUTCMonth();
+
+PERFORMANCE.pacing.target = POINTS_QUOTA_PER_MONTH;
+PERFORMANCE.pacing.today = \`\${_y}-\${_pad(_m + 1)}-\${_pad(_now.getUTCDate())}\`;
+PERFORMANCE.pacing.dayOfMonth = _now.getUTCDate();
+PERFORMANCE.pacing.daysInMonth = new Date(Date.UTC(_y, _m + 1, 0)).getUTCDate();
+`;
+
 // Exports the components actually import, per module. Anything a data.js happens
 // to carry but nothing imports is left out of the seed on purpose.
 const MODULES = {
@@ -126,7 +151,7 @@ const MODULES = {
   },
   performance: {
     keep: ["PERFORMANCE", "GEO_MONTHLY", "MQL_GEO_MONTHLY", "PROGRESSION_GEO"],
-    tail: "",
+    tail: PERFORMANCE_TAIL,
   },
   selfserved: {
     keep: ["SELFSERVED"],

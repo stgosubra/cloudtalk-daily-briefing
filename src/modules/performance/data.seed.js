@@ -868,3 +868,15 @@ export const PROGRESSION_GEO = {
   },
   "regions": []
 };
+
+import { POINTS_QUOTA_PER_MONTH } from "../../config.js";
+
+const _now = new Date();
+const _pad = (n) => String(n).padStart(2, "0");
+const _y = _now.getUTCFullYear();
+const _m = _now.getUTCMonth();
+
+PERFORMANCE.pacing.target = POINTS_QUOTA_PER_MONTH;
+PERFORMANCE.pacing.today = `${_y}-${_pad(_m + 1)}-${_pad(_now.getUTCDate())}`;
+PERFORMANCE.pacing.dayOfMonth = _now.getUTCDate();
+PERFORMANCE.pacing.daysInMonth = new Date(Date.UTC(_y, _m + 1, 0)).getUTCDate();

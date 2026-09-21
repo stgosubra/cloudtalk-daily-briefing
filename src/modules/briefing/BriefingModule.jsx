@@ -515,12 +515,18 @@ function Greeting() {
   const [idx, setIdx] = useState(0);
   const [fade, setFade] = useState(true);
   useEffect(() => {
+    // Rotate through EN/FR/ES once, then settle - an interval with no stop
+    // condition kept re-triggering this fade forever, showing up as a
+    // recurring UI twitch every ~2.8s for as long as the module stayed open.
+    let ticks = 0;
     const id = setInterval(() => {
       setFade(false);
       setTimeout(() => {
         setIdx((i) => (i + 1) % GREETINGS.length);
         setFade(true);
       }, 320);
+      ticks += 1;
+      if (ticks >= GREETINGS.length) clearInterval(id);
     }, 2800);
     return () => clearInterval(id);
   }, []);

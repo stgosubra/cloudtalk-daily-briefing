@@ -22,7 +22,11 @@ them from there; never inline an owner id into a query.
 
 ## Refresh scope and cadence
 
-Wraps **modules 01, 03 (Performance), 04 (Self-Served)** at the trigger. Present-day snapshot only.
+Wraps **modules 01, 03 (Performance), 04 (Self-Served)** at the trigger.
+
+**Cadence: 09:00, 11:00, 13:00, 15:00, 17:00 CET, Mon-Fri.** The 09:00 slot is a **full run** (01, then 03, then 04). Every later slot is a **module 01 top-up**: 01 only, 03 and 04 untouched. Meetings get booked into the current day after the morning brief is written, so a once-a-day 01 is structurally behind by lunchtime; 03/04 are YTD and 90-day trend series that do not move five times a day. 17:00 is the last slot - a call booked after 18:00 CET is not a same-day call, so the next 09:00 run serves it.
+
+Run type is read off `src/modules/briefing/data.js`: `TODAY_ISO` already equal to today means a full run landed today, so this is a top-up; `TODAY_ISO` older than today means full run. A manual trigger with no instruction defaults to a full run.
 
 | Module | id | Sources | Pull discipline |
 |--------|-----|---------|-----------------|
@@ -64,13 +68,17 @@ File: `src/modules/briefing/data.js`. Component (`BriefingModule.jsx`) is never 
 ### What gets regenerated each run
 
 - Date constants: `TODAY_ISO`, `TODAY_LABEL`, `REFRESHED_AT`, `WEEK_DAYS` (Mon-Fri of the current week - working week only, no weekend columns). Derived from `src/lib/dates.js`; never hand-typed.
-- `WEEK_PROSPECTS[TODAY_ISO]` = array of prospect cards for today.
+- `WEEK_PROSPECTS[TODAY_ISO]` = array of prospect cards for today, fully regenerated (facts + prose).
 - `WEEK_OTHER_EVENTS[TODAY_ISO]` = array of non-meeting calendar blocks for today.
-- Historical week arrays (`LAST_WEEK_PROSPECTS`, `TWO_WEEKS_AGO_PROSPECTS`, prior-day arrays) are **not** refreshed - they are frozen history.
+- **Intraweek pull, every run.** The calendar pull covers the whole current week (the `weekDays(TODAY_ISO)` Mon-Fri set), not just today. Future days of this week get their cards created or updated from the fresh calendar - a meeting booked Wednesday for Friday must appear on Wednesday, not on Friday morning. Days of the current week that have already elapsed are carried forward verbatim. Days with nothing on them stay `[]`; the generator requires all five week keys present.
+- Enrichment depth is graded by day, deliberately. Today's cards get the full treatment (exhaustive HubSpot + Gmail + Lusha + fresh prose, all the gates below). Future-day cards need the calendar facts and the HubSpot join at minimum; their prose is regenerated in full on the morning they become today.
+- Historical week arrays (`LAST_WEEK_PROSPECTS`, `TWO_WEEKS_AGO_PROSPECTS`) are **not** refreshed - they are frozen history, rolled by `gen-briefing.mjs` itself on a Monday change.
 
 ### Step 1 - Calendar (browser)
 
-Use `Claude_in_Chrome` (`tabs_context_mcp` -> `navigate` to Google Calendar day view for `TODAY_ISO` -> `get_page_text`). `Control_Chrome` is unreliable in this environment (read/exec fail with "Chrome not running"); prefer Claude_in_Chrome.
+Use `Claude_in_Chrome` (`tabs_context_mcp` -> `navigate` to Google Calendar -> `get_page_text`). `Control_Chrome` is unreliable in this environment (read/exec fail with "Chrome not running"); prefer Claude_in_Chrome.
+
+**Week view, not day view.** One pull of the current week covers today and the intraweek days above at the same cost as a day view. Read today's slice off it for the cards, and the Tue-Fri columns for the forward days.
 
 Per event extract: attendee display name + email, `start`, `end` (HH:MM), **meeting link**, RSVP status, canceled flag. Classify each event:
 
@@ -79,6 +87,8 @@ Per event extract: attendee display name + email, `start`, `end` (HH:MM), **meet
 
 **Meeting links are not HubSpot-scoped.** Pull the join link for *every* event that has one, whatever its provider and whoever created it - Google Meet, Zoom, Teams, Whereby, a raw dial-in URL in the location field or pasted in the description. Do not restrict this to HubSpot-booked meetings, and do not drop the link just because the event classified as an "other event": an internal sync or a partner call is exactly the kind of block where a one-click join is the whole point.
 
+This holds for **every invite in the intraweek pull**, not only today's: a forward-day card without its join link forces a calendar hunt at the moment the call starts, which is the one moment there is no time for it.
+
 Both classifications carry it under the same key, `meetLink`, so the UI needs no branch. Look in this order: the event's conferencing entry, then `location`, then the first URL in the description. No link found -> `meetLink: null`, never a guessed or reconstructed URL.
 
 ### Step 2 - HubSpot enrichment (per attendee)
@@ -86,6 +96,12 @@ Both classifications carry it under the same key, `meetLink`, so the UI needs no
 For each prospect attendee email, look up the contact (`search_crm_objects` on contacts by `email`). Single-record lookups are fine via raw MCP; the `/hs` aggregation rule applies only to counts. Pull:
 
 `firstname`, `lastname`, `company` (+ company domain for `companyUrl`), `jobtitle`, `country`, `hs_lead_status` (-> `leadStatus`), `lead_source` (-> `leadSource`), associated deal count (-> `deals`), `seat_range` (-> `seats`), `phone`.
+
+**Exhaustive search, per lead.** One email lookup is the start of the search, not the whole of it. If the email misses, or returns a record with the wanted properties empty, search again: by `firstname + lastname`, by company name, by the email's domain against company records, and check the contact's associated company for firmographics the contact record does not carry. Only after those miss is the field genuinely absent.
+
+`country` is the field this rule exists for. It drives the Gmail draft language (Step 3), so a null country does not degrade gracefully - it ships an English draft to a French prospect and nothing in the app flags it. Chase it on the contact, then the associated company, then the phone country code as a last resort (recorded as an inference in `dataGaps`, never written as if pulled).
+
+A property the record genuinely does not hold is `null` **and** an entry in `dataGaps`. A property that was not looked for is a defect, not a gap.
 
 Ambiguity rule: if the calendar gives only a first name and HubSpot returns multiple matches, pick the best candidate, **flag the assumption** in `companyBrief`, and add a "confirm who is on the call" qualifier. Never silently guess.
 
@@ -187,7 +203,11 @@ File: `src/modules/selfserved/data.js`. Single export `SELFSERVED` (+ `onboardin
 ### Cohort (all must hold)
 
 - `hubspot_owner_id` = `<ownerId>`
-- `hs_lead_status` != 'Qualified' (already-qualified leads are being worked / have a deal)
+- `hs_lead_status` NOT IN ('Qualified', 'ATTEMPTED_TO_CONTACT') - both are excluded up front.
+  `ATTEMPTED_TO_CONTACT` means "Qualified Out" in this account's lead-status model
+  (see CLAUDE.md memory: never filter *for*/pull this status as an open cohort) and
+  is treated as functionally equivalent to `Qualified` for this cohort - it must never
+  surface as an eligible or non-qualified-open Self-Served candidate.
 - `account_became_active` within the rolling 90-day window
 - contact has **zero open** and **zero closed-won** deals (closed-lost is allowed -> flagged RE-ENGAGE)
 

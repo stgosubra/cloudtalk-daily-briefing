@@ -26,7 +26,8 @@ const HEADER = `// Self-Served Tracker - live pull for ${PROFILE.name} (HubSpot 
 //
 // Cohort (all must hold):
 //   - hubspot_owner_id = ${PROFILE.ownerId}
-//   - hs_lead_status != 'Qualified'
+//   - hs_lead_status NOT IN ('Qualified', 'ATTEMPTED_TO_CONTACT') - the latter means
+//     "Qualified Out" in this account's lead-status model and is excluded like Qualified.
 //   - account_became_active within the rolling 90-day window
 //   - contact has zero OPEN and zero CLOSED-WON deals (closed-lost -> RE-ENGAGE)
 // Eligibility judged on contact-level deal association (associations.DEAL).

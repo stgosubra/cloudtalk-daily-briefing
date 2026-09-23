@@ -9,6 +9,7 @@ import BriefingModule from "./modules/briefing/index.jsx";
 import CalculatorModule from "./modules/calculator/index.jsx";
 import PerformanceModule from "./modules/performance/index.jsx";
 import SelfServedModule from "./modules/selfserved/index.jsx";
+import CoachModule from "./modules/coach/index.jsx";
 import { onboardingAlertCount } from "./modules/selfserved/data.js";
 
 // Module metadata comes from lib/modules.js; only the component binding lives
@@ -19,6 +20,7 @@ const COMPONENTS = {
   calculator: CalculatorModule,
   performance: PerformanceModule,
   selfserved: SelfServedModule,
+  coach: CoachModule,
 };
 
 const NAV = MODULES.map((m) => ({ ...m, component: COMPONENTS[m.id] }));

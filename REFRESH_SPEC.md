@@ -22,9 +22,9 @@ them from there; never inline an owner id into a query.
 
 ## Refresh scope and cadence
 
-Wraps **modules 01, 03 (Performance), 04 (Self-Served)** at the trigger.
+Wraps **modules 01, 05 (Coach), 03 (Performance), 04 (Self-Served)** at the trigger.
 
-**Cadence: 09:00, 11:00, 13:00, 15:00, 17:00 CET, Mon-Fri.** The 09:00 slot is a **full run** (01, then 03, then 04). Every later slot is a **module 01 top-up**: 01 only, 03 and 04 untouched. Meetings get booked into the current day after the morning brief is written, so a once-a-day 01 is structurally behind by lunchtime; 03/04 are YTD and 90-day trend series that do not move five times a day. 17:00 is the last slot - a call booked after 18:00 CET is not a same-day call, so the next 09:00 run serves it.
+**Cadence: 09:00, 11:00, 13:00, 15:00, 17:00 CET, Mon-Fri.** The 09:00 slot is a **full run** (01, then 05, then 03, then 04). Every later slot is a **module 01 + 05 top-up**: 01 then 05, 03 and 04 untouched. Meetings get booked into the current day after the morning brief is written, so a once-a-day 01 is structurally behind by lunchtime; 03/04 are YTD and 90-day trend series that do not move five times a day. 17:00 is the last slot - a call booked after 18:00 CET is not a same-day call, so the next 09:00 run serves it.
 
 Run type is read off `src/modules/briefing/data.js`: `TODAY_ISO` already equal to today means a full run landed today, so this is a top-up; `TODAY_ISO` older than today means full run. A manual trigger with no instruction defaults to a full run.
 
@@ -33,10 +33,11 @@ Run type is read off `src/modules/briefing/data.js`: `TODAY_ISO` already equal t
 | 01 Today / Schedule | `briefing` | Google Calendar + HubSpot + Gmail | calendar via browser, HubSpot per-contact lookup, Gmail via browser |
 | 03 Performance | `performance` | HubSpot | `/hs` (server-side GROUP BY aggregation) |
 | 04 Self-Served | `selfserved` | HubSpot | `/hs` + per-contact deal-association check |
+| 05 Coach | `coach` | briefing + performance + selfserved data.js | LLM generation via `gen-coach.mjs` |
 
 **Order is a hard gate, not a preference.** `briefing/data.js` must be written and verified by `gen-briefing.mjs` before the first module 03 or 04 query is issued. Module 01 briefs calls happening within hours; 03 and 04 are trend data that tolerate a day of staleness. A run that burns its first stretch on YTD aggregations and then dies has failed at the only thing that could not wait. A failed 01 therefore stops the run; a failed 03 continues to 04.
 
-The other two surviving modules pull nothing: 00 Dashboard derives its tiles from the registry, 02 Calculator is pure client-side computation. Pre-Call SE now lives outside this app (`cloudtalk-precall-se/`, entered via the `pcb-cloudtalk` skill); Coach and Competitor were removed.
+The other two surviving modules pull nothing: 00 Dashboard derives its tiles from the registry, 02 Calculator is pure client-side computation. Pre-Call SE now lives outside this app (`cloudtalk-precall-se/`, entered via the `pcb-cloudtalk` skill); Competitor was removed.
 
 ## `/hs` discipline (modules 03 and 04)
 
@@ -242,6 +243,44 @@ Eligibility judged on contact-level deal association (`associations.DEAL`).
 ### PII handling
 
 Same as module 01: names, emails, phones are present; local dashboard only; never logged, transmitted, or stored in memory.
+
+---
+
+## Module 05 - Coach (AI strategy)
+
+File: `src/modules/coach/data.js`. Single export `COACH`. PII-free: references cards by index, not by name/email.
+
+### Generation
+
+`scripts/gen-coach.mjs` runs during the `briefing-daily` refresh, after module 01 ships. It reads the three data.js files (`briefing`, `performance`, `selfserved`) and sends them with the system prompt from `scripts/lib/coach-prompt.mjs` to Claude. The response is validated and written through the `refresh-core.mjs` pipeline.
+
+### Cadence
+
+- **Full run (09:00)**: after module 01, before module 03. Order: 01 -> 05 -> 03 -> 04.
+- **Top-up run (11:00/13:00/15:00/17:00)**: after module 01, every time.
+
+If performance or selfserved data is stale (yesterday's), the generator still runs - the brief's primary value comes from today's calendar, which is always fresh.
+
+### Data shape
+
+```js
+export const COACH = {
+  generatedAt: "ISO",
+  todayIso: "YYYY-MM-DD",
+  priorities: [{ rank, type, title, detail, linkedModule, linkedEntity, urgency }],
+  pipelinePulse: { summary, risks: [], opportunities: [] },
+  weekRead: "...",
+  dataGaps: [],
+};
+```
+
+### Validation
+
+1. `priorities` is 1-8 items, each with all required keys.
+2. Every `linkedModule` is one of "01", "03", "04".
+3. `pipelinePulse.summary` is non-empty.
+4. `urgency` is one of "high", "medium", "low".
+5. No email address anywhere in the serialized output (PII leak check).
 
 ---
 

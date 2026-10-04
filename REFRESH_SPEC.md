@@ -22,9 +22,9 @@ them from there; never inline an owner id into a query.
 
 ## Refresh scope and cadence
 
-Wraps **modules 01, 05 (Coach), 03 (Performance), 04 (Self-Served)** at the trigger.
+Wraps **modules 01, 05 (Coach), 03 (Performance), 04 (Self-Served), 06 (SDR Pacing), 07 (Demos)** at the trigger.
 
-**Cadence: 09:00, 11:00, 13:00, 15:00, 17:00 CET, Mon-Fri.** The 09:00 slot is a **full run** (01, then 05, then 03, then 04). Every later slot is a **module 01 + 05 top-up**: 01 then 05, 03 and 04 untouched. Meetings get booked into the current day after the morning brief is written, so a once-a-day 01 is structurally behind by lunchtime; 03/04 are YTD and 90-day trend series that do not move five times a day. 17:00 is the last slot - a call booked after 18:00 CET is not a same-day call, so the next 09:00 run serves it.
+**Cadence: 09:00, 11:00, 13:00, 15:00, 17:00 CET, Mon-Fri.** The 09:00 slot is a **full run** (01, then 05, then 03, then 04, then 06, then 07). Every later slot is a **module 01 + 05 top-up**: 01 then 05, 03/04/06/07 untouched. Meetings get booked into the current day after the morning brief is written, so a once-a-day 01 is structurally behind by lunchtime; 03/04 are YTD and 90-day trend series that do not move five times a day. 17:00 is the last slot - a call booked after 18:00 CET is not a same-day call, so the next 09:00 run serves it.
 
 Run type is read off `src/modules/briefing/data.js`: `TODAY_ISO` already equal to today means a full run landed today, so this is a top-up; `TODAY_ISO` older than today means full run. A manual trigger with no instruction defaults to a full run.
 
@@ -34,8 +34,10 @@ Run type is read off `src/modules/briefing/data.js`: `TODAY_ISO` already equal t
 | 03 Performance | `performance` | HubSpot | `/hs` (server-side GROUP BY aggregation) |
 | 04 Self-Served | `selfserved` | HubSpot | `/hs` + per-contact deal-association check |
 | 05 Coach | `coach` | briefing + performance + selfserved data.js | LLM generation via `gen-coach.mjs` |
+| 06 SDR Pacing | `pacing` | HubSpot | `/hs` (per-SDR SQL/SQO aggregation) |
+| 07 Demos | `demos` | HubSpot | `/hs` (deal-level demo pull + enrichment) |
 
-**Order is a hard gate, not a preference.** `briefing/data.js` must be written and verified by `gen-briefing.mjs` before the first module 03 or 04 query is issued. Module 01 briefs calls happening within hours; 03 and 04 are trend data that tolerate a day of staleness. A run that burns its first stretch on YTD aggregations and then dies has failed at the only thing that could not wait. A failed 01 therefore stops the run; a failed 03 continues to 04.
+**Order is a hard gate, not a preference.** `briefing/data.js` must be written and verified by `gen-briefing.mjs` before the first module 03 or 04 query is issued. Module 01 briefs calls happening within hours; 03 and 04 are trend data that tolerate a day of staleness. A run that burns its first stretch on YTD aggregations and then dies has failed at the only thing that could not wait. A failed 01 therefore stops the run; a failed 03 continues to 04. Modules 06 and 07 run after 04, in that order. A failed 06 continues to 07.
 
 The other two surviving modules pull nothing: 00 Dashboard derives its tiles from the registry, 02 Calculator is pure client-side computation. Pre-Call SE now lives outside this app (`cloudtalk-precall-se/`, entered via the `pcb-cloudtalk` skill); Competitor was removed.
 
@@ -281,6 +283,170 @@ export const COACH = {
 3. `pipelinePulse.summary` is non-empty.
 4. `urgency` is one of "high", "medium", "low".
 5. No email address anywhere in the serialized output (PII leak check).
+
+---
+
+## Module 06 - SDR Pacing
+
+File: `src/modules/pacing/data.js`. Single export `PACING`. All counts via `/hs` GROUP BY across the full SDR roster.
+
+### What it tracks
+
+Current-month SQL and SQO actuals for every SDR in both offices (BCN + TOR), against per-person targets from `src/pacing.config.js`. The component renders progress bars, pace markers, status pills, and a month-over-month comparison tab.
+
+### Pull discipline
+
+Two `/hs` aggregations, one for SQL and one for SQO, grouped by `deal_creator__sdr_only_`:
+
+**SQL actuals (current month):**
+```
+SELECT deal_creator__sdr_only_, SUM(amount_in_home_currency), COUNT(*)
+FROM deals
+WHERE deal_creator__sdr_only_ IN (<all roster owner IDs>)
+  AND createdate BETWEEN <month_start> AND <now>
+GROUP BY deal_creator__sdr_only_
+```
+
+**SQO actuals (current month):**
+```
+SELECT deal_creator__sdr_only_, SUM(amount_in_home_currency), COUNT(*)
+FROM deals
+WHERE deal_creator__sdr_only_ IN (<all roster owner IDs>)
+  AND deal_accepted_by_ae = 'true'
+  AND accepted_deal__date_time_ BETWEEN <month_start> AND <now>
+GROUP BY deal_creator__sdr_only_
+```
+
+Both queries run in parallel. Owner IDs come from `pacing.config.js` roster, not hardcoded. Results are keyed by owner ID in the `actuals` object.
+
+### Payload assembly
+
+1. Read `CURRENT_MONTH` from `src/pacing.config.js` for targets, roster, offices, pool.
+2. For each roster entry, call `calFor(person, todayIso)` to get `{ total, elapsed, left }`.
+3. Build the payload:
+
+```js
+{
+  todayIso: "YYYY-MM-DD",
+  monthLabel: "October",
+  roster: [{ id, name, office, sql, sqo, cal: { total, elapsed, left }, note? }],
+  actuals: { "<ownerId>": { sqlMrr, sqlDeals, sqoMrr, sqoDeals } },
+  offices: { BCN: { label, region, workingDays }, TOR: { ... } },
+  pool: { sql, sqo }
+}
+```
+
+4. Write to temp file, run `node scripts/gen-pacing.mjs <payload.json>`.
+
+### Reconciliation
+
+- Roster is non-empty.
+- Every roster entry has `id`, `name`, `office`, `sql`, `sqo`, `cal`.
+- Actuals keyed by owner ID.
+- If `rollups.team` is present, team SQL/SQO must equal sum of individual actuals.
+
+### Cadence
+
+Full run only (09:00). Not on top-up runs - pacing numbers move once a day at most.
+
+---
+
+## Module 07 - Demos at Stake
+
+File: `src/modules/demos/data.js`. Single export `DEMOS`. Deal-level pull via `/hs`, enriched per-demo.
+
+### What it tracks
+
+Demos booked on inbound-SDR deals across both offices. Tracks MRR at stake, segment mix, no-show rate, speed-to-demo, and per-SDR breakdown. Horizon window: 15 working days forward, 20 working days back, 8-week history.
+
+### Cohort
+
+A demo is an inbound-SDR deal with a booked demo slot (`demo_call__date_time_` is set):
+
+- `deal_creator__sdr_only_` IN `(<all roster owner IDs>)` - team-wide, not just the operator
+- `demo_call__date_time_` within the pull window (20 working days back through 15 working days forward from today)
+- Exclude deals already past AE acceptance with > 24h grace: if `deal_accepted_by_ae = 'true'` AND `accepted_deal__date_time_` < today - 1 day, skip
+
+### Pull
+
+Use `search_crm_objects` (not `query_crm_data`) because individual deal records are needed, not aggregates. Read `total`, paginate to it.
+
+**Properties to request:**
+`dealname`, `deal_creator__sdr_only_`, `demo_call__date_time_`, `hubspot_owner_id`, `amount_in_home_currency`, `deal_currency_code`, `country`, `hs_analytics_source`, `dealstage`, `createdate`, `deal_accepted_by_ae`, `accepted_deal__date_time_`, `demo_no_show_status`, `closedate`
+
+**Filter:**
+```json
+{
+  "filterGroups": [{
+    "filters": [
+      { "propertyName": "deal_creator__sdr_only_", "operator": "IN", "values": ["<all roster IDs>"] },
+      { "propertyName": "demo_call__date_time_", "operator": "BETWEEN", "value": "<window_start_epoch_ms>", "highValue": "<window_end_epoch_ms>" }
+    ]
+  }]
+}
+```
+
+### Per-demo enrichment
+
+For each deal returned:
+
+1. **SDR name** - look up `deal_creator__sdr_only_` in the roster from `demos.config.js`.
+2. **AE name** - `hubspot_owner_id` is the current owner (AE after handoff). Look up owner name via `search_owners`.
+3. **Segment** - apply `segOf(amount_in_home_currency)` from `demos.config.js`: micro < 500, smb 500-1500, mm > 1500, none if null.
+4. **No-show status** - apply `noShowState(demo_no_show_status)` from `demos.config.js`: "ok", "noshow", or "rescheduled".
+5. **Speed-to-demo** - working hours between `createdate` and `demo_call__date_time_`, weekends excluded. `slow = speedH >= 48`.
+6. **In play** - `true` unless `ns === "noshow"` or deal is in a won/lost stage (stage IDs from `demos.config.js`).
+7. **Closed** - if dealstage is in `WON_STAGES` -> "won"; in `LOST_STAGES` -> "lost"; else `null`.
+8. **Office** - from roster lookup on `deal_creator__sdr_only_`.
+9. **Key** - ISO date portion of `demo_call__date_time_` (the calendar day the demo is booked on).
+10. **Time** - HH:MM portion of `demo_call__date_time_`, converted to the office's local timezone (BCN -> Europe/Madrid, TOR -> America/Toronto).
+
+### Payload shape
+
+```js
+{
+  todayIso: "YYYY-MM-DD",
+  demos: [{
+    id: "<dealId>",
+    name: "<dealname>",
+    key: "YYYY-MM-DD",        // demo date
+    time: "HH:MM",            // local to office TZ
+    office: "BCN" | "TOR",
+    sdrId: "<ownerId>",
+    sdr: "Name",
+    ae: "Name",
+    amt: 1200,                 // amount_in_home_currency (EUR)
+    seg: "micro" | "smb" | "mm" | "none",
+    country: "ES",
+    src: "Inbound",            // hs_analytics_source
+    speedH: 22,                // working hours deal-create -> demo
+    slow: false,               // speedH >= 48
+    ns: "ok" | "noshow" | "rescheduled",
+    closed: null | "won" | "lost",
+    inPlay: true,
+    url: "https://app.hubspot.com/contacts/6195055/record/0-2/<dealId>"
+  }],
+  roster: {
+    "<ownerId>": { name: "Name", office: "BCN" | "TOR", lead: false }
+  }
+}
+```
+
+Write to temp file, run `node scripts/gen-demos.mjs <payload.json>`.
+
+### Reconciliation
+
+- `DEMOS` has `todayIso`, `demos` (array), `roster` (object).
+- Every demo has required keys: `id`, `name`, `key`, `time`, `office`, `sdrId`, `sdr`, `seg`, `ns`, `inPlay`.
+- Valid `office`: BCN, TOR. Valid `seg`: micro, smb, mm, none. Valid `ns`: ok, noshow, rescheduled.
+
+### Cadence
+
+Full run only (09:00). Not on top-up runs - demo bookings do not change intraday at the frequency that justifies re-pulling.
+
+### PII handling
+
+`demos[].name` is a deal name (company), not a person's name. No personal contact data in the payload. Safe from a PII standpoint, but `data.js` is still gitignored as a matter of policy.
 
 ---
 

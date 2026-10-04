@@ -11,6 +11,7 @@ import PerformanceModule from "./modules/performance/index.jsx";
 import SelfServedModule from "./modules/selfserved/index.jsx";
 import CoachModule from "./modules/coach/index.jsx";
 import PacingModule from "./modules/pacing/index.jsx";
+import DemosModule from "./modules/demos/index.jsx";
 import { onboardingAlertCount } from "./modules/selfserved/data.js";
 
 // Module metadata comes from lib/modules.js; only the component binding lives
@@ -23,6 +24,7 @@ const COMPONENTS = {
   selfserved: SelfServedModule,
   coach: CoachModule,
   pacing: PacingModule,
+  demos: DemosModule,
 };
 
 const NAV = MODULES.map((m) => ({ ...m, component: COMPONENTS[m.id] }));

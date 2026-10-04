@@ -53,6 +53,14 @@ const Icon = {
       <path d="M5 6l4 3 4-4 5 4" />
     </svg>
   ),
+  demos: (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="14" rx="2" />
+      <path d="M10 9l5 3-5 3z" />
+      <path d="M8 21h8" />
+      <path d="M12 18v3" />
+    </svg>
+  ),
 };
 
 // Tiles are the shared registry plus this file's SVG icons. Icon keys match

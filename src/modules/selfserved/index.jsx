@@ -40,7 +40,7 @@ const FLAG = {
 // days between an ISO date and the snapshot "today"
 function daysAgo(iso, today) {
   if (!iso) return null;
-  const a = new Date(iso + "T00:00:00Z");
+  const a = new Date(iso.includes("T") ? iso : iso + "T00:00:00Z");
   const b = new Date(today + "T00:00:00Z");
   return Math.round((b - a) / 86400000);
 }

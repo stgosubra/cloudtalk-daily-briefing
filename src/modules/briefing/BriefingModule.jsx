@@ -1045,6 +1045,26 @@ function WeekCard({ m }) {
   );
 }
 
+// ev.emoji arrives as a shortcode name (e.g. "muscle"), not a glyph - the live
+// pull has no reliable way to emit literal unicode emoji in JSON. Map known
+// shortcodes to glyphs here; unknown/already-a-glyph values pass through as-is.
+const EMOJI_SHORTCODES = {
+  muscle: "💪",
+  speech_balloon: "💬",
+  brain: "🧠",
+  headphones: "🎧",
+  broom: "🧹",
+  calendar: "📅",
+  car: "🚗",
+  fork_and_knife: "🍴",
+  house: "🏠",
+  palm_tree: "🌴",
+  pizza: "🍕",
+};
+function emojiGlyph(code) {
+  return EMOJI_SHORTCODES[code] || code;
+}
+
 function OtherCard({ ev, index }) {
   const palMap = { amber: C.amber, purple: C.purple, cyan: C.cyan, emerald: C.emerald, red: C.red };
   const accent = palMap[ev.color] || C.purple;
@@ -1060,7 +1080,7 @@ function OtherCard({ ev, index }) {
         <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>{ev.end}</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 16 }}>{ev.emoji}</span>
+        <span style={{ fontSize: 16 }}>{emojiGlyph(ev.emoji)}</span>
         <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>{ev.name}</span>
         {ev.note && <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>{ev.note}</span>}
         {ev.meetLink && (() => {

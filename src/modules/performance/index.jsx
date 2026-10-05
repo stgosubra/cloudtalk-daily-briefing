@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { PERFORMANCE } from "./data.js";
 import { PORTAL_ID, POINTS_QUOTA_PER_MONTH } from "../../config.js";
 import {
   Page, PageHeader, Card, SectionLabel, Stat, StatRow, StatusDot,
-  Badge, DataList, DataRow, AreaChart, Empty,
+  AreaChart,
 } from "../../design/ui.jsx";
 import { Gauge, FunnelFlow, CountUp, Sparkline } from "../../design/viz.jsx";
 import { C, R, T, TRACK, NUM, SEMANTIC, FONT_SANS, FONT_MONO } from "../../lib/tokens.js";
@@ -19,6 +19,49 @@ import { C, R, T, TRACK, NUM, SEMANTIC, FONT_SANS, FONT_MONO } from "../../lib/t
 const MASK = "•••";
 
 const eur = (n) => "€" + Math.round(n).toLocaleString("en-US");
+
+// Charts below start at February - January is a 4-SQO ramp month whose tiny
+// denominator distorts every rate. Render-time filter only; the data keeps Jan.
+const SINCE = "2026-02";
+
+// ---------------------------------------------------------------------------
+// Qualification quality - acceptance rate and SQO->Won rate, monthly
+// ---------------------------------------------------------------------------
+// Two rates, one chart, because they are the same question: do my quals
+// survive contact with an AE and then with the market. Acceptance buckets on
+// decision month (accepted_deal__date_time_ / rejected_deal_timestamp), so
+// history is effectively append-only; the current month still moves as
+// pending deals get decided.
+function QualityCard({ accByMonth, sqoWonByMonth, accYtd, sqoWonYtd }) {
+  const acc = accByMonth.filter((m) => m.month >= SINCE);
+  const won = sqoWonByMonth.filter((m) => m.month >= SINCE);
+  const accSeries = acc.map((m) => {
+    const decided = m.accepted + m.rejected;
+    return { x: m.label, y: decided > 0 ? (m.accepted / decided) * 100 : 0 };
+  });
+  const wonLine = won.map((m) => ({ x: m.label, y: m.sqo > 0 ? (m.won / m.sqo) * 100 : 0 }));
+  const accYtdDecided = accYtd.accepted + accYtd.rejected;
+  const accYtdRate = accYtdDecided > 0 ? Math.round((accYtd.accepted / accYtdDecided) * 100) : null;
+  const wonYtdRate = sqoWonYtd.sqo > 0 ? Math.round((sqoWonYtd.won / sqoWonYtd.sqo) * 100) : null;
+  return (
+    <Card title="Qualification quality · since Feb" right={<SectionLabel>monthly rates</SectionLabel>} style={{ marginTop: 18 }}>
+      <AreaChart
+        series={accSeries}
+        reference={[{ points: wonLine, color: C.blue, dash: "4 5", opacity: 0.8 }]}
+        color={SEMANTIC.ok.fill}
+        height={170}
+        yMax={100}
+        xLabels={acc.map((m) => m.label)}
+        format={(v) => `${Math.round(v)}%`}
+      />
+      <div style={{ font: `400 ${T.micro}px/1.6 ${FONT_SANS}`, color: C.textHint, marginTop: 10 }}>
+        Solid line is AE acceptance ({accYtdRate == null ? "-" : `${accYtdRate}% YTD`}), dashed is
+        SQO to Won ({wonYtdRate == null ? "-" : `${wonYtdRate}% YTD`}). Both bucket on decision
+        month - the current month is still deciding, so its points will move.
+      </div>
+    </Card>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Attainment dial
@@ -45,6 +88,80 @@ function AttainmentDial({ earned, target, pacePct, expected, masked }) {
         {earned} / {masked ? MASK : target} pts
       </div>
     </Gauge>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Segment mix - SQO value by seat segment, monthly stacked bars
+// ---------------------------------------------------------------------------
+// Where the euros come from. Deliberately NOT masked by present mode: segment
+// MRR is deal data, not comp-plan data.
+const SEG = [
+  { key: "micro", label: "Micro", color: C.cyan },
+  { key: "smb", label: "SMB", color: C.blue },
+  { key: "midmarket", label: "Mid-market", color: C.bloom },
+];
+
+function SegmentBars({ months }) {
+  const totals = months.map((m) => SEG.reduce((a, s) => a + (m.sqo[s.key]?.value || 0), 0));
+  const max = Math.max(...totals, 1);
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 150 }}>
+        {months.map((m, i) => (
+          <div
+            key={m.month}
+            title={SEG.map((s) => `${s.label} ${eur(m.sqo[s.key]?.value || 0)}`).join(" · ")}
+            style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end", height: "100%" }}
+          >
+            <div style={{
+              display: "flex", flexDirection: "column-reverse",
+              height: `${Math.max((totals[i] / max) * 100, totals[i] > 0 ? 2 : 0)}%`,
+              borderRadius: 3, overflow: "hidden",
+            }}>
+              {SEG.map((s) => {
+                const v = m.sqo[s.key]?.value || 0;
+                if (v <= 0 || totals[i] <= 0) return null;
+                return <div key={s.key} style={{ height: `${(v / totals[i]) * 100}%`, background: s.color, opacity: 0.72 }} />;
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 10, marginTop: 7 }}>
+        {months.map((m) => (
+          <div key={m.month} style={{ flex: 1, textAlign: "center", font: `400 ${T.micro}px/1 ${FONT_MONO}`, color: C.textHint }}>
+            {m.label}
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: 14, marginTop: 12 }}>
+        {SEG.map((s) => (
+          <span key={s.key} style={{ display: "inline-flex", alignItems: "center", gap: 6, font: `400 ${T.micro}px/1 ${FONT_SANS}`, color: C.textMuted }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: s.color, opacity: 0.72 }} />
+            {s.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SegmentMixCard({ segmentMonthly, segmentSplit }) {
+  const months = segmentMonthly.filter((m) => m.month >= SINCE);
+  const sqoYtd = segmentSplit.sqo;
+  const totCount = SEG.reduce((a, s) => a + (sqoYtd[s.key]?.count || 0), 0);
+  const totValue = SEG.reduce((a, s) => a + (sqoYtd[s.key]?.value || 0), 0);
+  const mmValuePct = totValue > 0 ? Math.round(((sqoYtd.midmarket?.value || 0) / totValue) * 100) : 0;
+  const mmCountPct = totCount > 0 ? Math.round(((sqoYtd.midmarket?.count || 0) / totCount) * 100) : 0;
+  return (
+    <Card
+      title="Segment mix · SQO value by month"
+      right={<SectionLabel>MM is {mmValuePct}% of value on {mmCountPct}% of deals</SectionLabel>}
+      style={{ marginTop: 18 }}
+    >
+      <SegmentBars months={months} />
+    </Card>
   );
 }
 
@@ -87,10 +204,47 @@ function PresentToggle({ on, set }) {
 }
 
 // ---------------------------------------------------------------------------
+// Monthly progression - the MQL -> SQL -> SQO ladder in counts and euros
+// ---------------------------------------------------------------------------
+const PROG_COLS = "48px 1fr 1fr 1.3fr 1fr 1.3fr 0.8fr";
+
+function ProgressionCard({ rows }) {
+  const data = rows.filter((r) => r.month >= SINCE);
+  const head = { font: `500 ${T.micro}px/1 ${FONT_MONO}`, color: C.textHint, textTransform: "uppercase", letterSpacing: 0.4 };
+  const cell = { font: `400 ${T.body - 1}px/1 ${FONT_MONO}`, color: C.textMid, ...NUM };
+  const right = { textAlign: "right" };
+  return (
+    <Card title="Monthly progression" right={<SectionLabel>since Feb</SectionLabel>} style={{ marginTop: 18 }}>
+      <div style={{ display: "grid", gridTemplateColumns: PROG_COLS, gap: "10px 14px", alignItems: "baseline" }}>
+        <span style={head}>Month</span>
+        <span style={{ ...head, ...right }}>MQL</span>
+        <span style={{ ...head, ...right }}>SQL</span>
+        <span style={{ ...head, ...right }}>SQL MRR</span>
+        <span style={{ ...head, ...right }}>SQO</span>
+        <span style={{ ...head, ...right }}>SQO MRR</span>
+        <span style={{ ...head, ...right }}>Rej.</span>
+        {data.map((r) => (
+          <Fragment key={r.month}>
+            <span style={{ ...cell, color: C.textMuted }}>{r.label}</span>
+            <span style={{ ...cell, ...right }}>{r.mqlCount.toLocaleString("en-US")}</span>
+            <span style={{ ...cell, ...right }}>{r.sqlCount}</span>
+            <span style={{ ...cell, ...right }}>{eur(r.sqlValue)}</span>
+            <span style={{ ...cell, ...right }}>{r.sqoCount}</span>
+            <span style={{ ...cell, ...right, color: C.text }}>{eur(r.sqoValue)}</span>
+            <span style={{ ...cell, ...right, color: r.rejectedCount > 0 ? SEMANTIC.risk.fill : C.textHint }}>{r.rejectedCount}</span>
+          </Fragment>
+        ))}
+      </div>
+      <div style={{ font: `400 ${T.micro}px/1.6 ${FONT_SANS}`, color: C.textHint, marginTop: 12 }}>
+        Values are MRR in home currency (EUR). SQO MRR is the slice of SQL MRR an AE accepted.
+      </div>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Workday maths
 // ---------------------------------------------------------------------------
-const hoursSince = (iso, nowMs) => (nowMs - new Date(iso).getTime()) / 36e5;
-
 // Workdays (Mon-Fri) elapsed and total for the month containing `todayIso`.
 // Run-rate on calendar days flatters a Monday and punishes a Friday, so pace is
 // always computed on workdays. UTC-anchored to dodge DST.
@@ -113,76 +267,10 @@ function deriveWorkdays(todayIso) {
 }
 
 // ---------------------------------------------------------------------------
-// Stall row
-// ---------------------------------------------------------------------------
-const STALL_COLS = "16px minmax(150px, 1.4fr) 112px 1fr 150px 62px 64px";
-
-function StallRow({ s, hsBase, now, last }) {
-  const days = Math.floor(s.ageH / 24);
-  // 96h is where a pending demo stops being slow and starts being forgotten -
-  // that is the one to chase today, not the one to keep monitoring.
-  const urgent = s.ageH >= 96;
-  const demoD = s.demoDate ? new Date(s.demoDate) : null;
-  const reschedD = s.rescheduledDate ? new Date(s.rescheduledDate) : null;
-  const demoPast = demoD && demoD < now;
-  const fmtDate = (d) => (d ? d.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : null);
-  const fmtTime = (d) => (d ? d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : null);
-
-  let status, statusLevel;
-  if (s.noShow) {
-    status = "no-show"; statusLevel = "risk";
-  } else if (reschedD) {
-    status = `reschedule ${fmtDate(reschedD)}`; statusLevel = "warn";
-  } else if (!demoD) {
-    // A pending SQL with no demo on the calendar at all is the worst of the
-    // set - nothing is going to move it without a booking, so it reads as risk
-    // rather than as a quiet "upcoming".
-    status = "no demo booked"; statusLevel = "risk";
-  } else if (!demoPast) {
-    status = `demo ${fmtDate(demoD)} ${fmtTime(demoD)}`; statusLevel = "idle";
-  } else {
-    status = "demo done - pending"; statusLevel = "warn";
-  }
-
-  return (
-    <DataRow
-      last={last}
-      onClick={() => window.open(hsBase + s.id, "_blank", "noreferrer")}
-      style={{ display: "grid", gridTemplateColumns: STALL_COLS, gap: 12, alignItems: "center" }}
-    >
-      <StatusDot level={urgent ? "risk" : "warn"} />
-      <span style={{
-        font: `500 ${T.body}px/1.3 ${FONT_SANS}`, color: C.text,
-        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-      }}>
-        {s.name}
-      </span>
-      <span style={{ font: `400 ${T.micro}px/1 ${FONT_MONO}`, color: demoPast ? C.textFaint : C.textMid, ...NUM }}>
-        {demoD ? `${fmtDate(demoD)} ${fmtTime(demoD)}` : "-"}
-      </span>
-      <span style={{
-        font: `400 ${T.micro}px/1 ${FONT_SANS}`, color: C.textMuted,
-        whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-      }}>
-        {s.owner}
-      </span>
-      <Badge level={statusLevel} mono>{status}</Badge>
-      <span style={{ font: `400 ${T.micro}px/1 ${FONT_MONO}`, color: C.textMid, textAlign: "right", ...NUM }}>
-        {s.points} pts
-      </span>
-      <span style={{
-        font: `400 ${T.micro}px/1 ${FONT_MONO}`, textAlign: "right", ...NUM,
-        color: urgent ? C.red : C.amber,
-      }}>
-        {days}d old
-      </span>
-    </DataRow>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Module
 // ---------------------------------------------------------------------------
+// Stalled pending SQLs used to be listed here; they now live in module 07 as
+// the first stage of the pipeline, scoped to the current month.
 export default function PerformanceModule() {
   const [present, setPresent] = useState(true);
   const p = PERFORMANCE;
@@ -193,7 +281,6 @@ export default function PerformanceModule() {
     dayOfMonth, daysInMonth, today, workdaysElapsed, workdaysTotal,
   } = p.pacing;
 
-  const now = Date.now();
   const commission = target > 0 ? (earned / target) * fullCommission : 0;
 
   const derived = deriveWorkdays(today);
@@ -217,12 +304,6 @@ export default function PerformanceModule() {
   const accPts = acc.accepted.points + acc.rejected.points + acc.pending.points;
   const decided = acc.accepted.count + acc.rejected.count;
   const accRate = decided > 0 ? (acc.accepted.count / decided) * 100 : null;
-
-  const stalls = p.stalls
-    .map((s) => ({ ...s, ageH: hoursSince(s.createdate, now) }))
-    .sort((a, b) => b.ageH - a.ageH)
-    .filter((s) => s.ageH >= 24);
-  const stalledPts = stalls.reduce((a, s) => a + s.points, 0);
 
   // Year-to-date funnel. Taken from the reconciled rollups rather than re-summed
   // from the per-seat blocks - two routes to the same number is two numbers.
@@ -350,26 +431,16 @@ export default function PerformanceModule() {
         </Card>
       )}
 
-      <Card
-        title="Stall alerts"
-        label="pending SQLs older than 24h"
-        right={
-          <SectionLabel style={{ color: stalls.length ? C.amber : C.emerald }}>
-            {stalls.length} stalled · {stalledPts} pts at risk
-          </SectionLabel>
-        }
-        style={{ marginTop: 18 }}
-      >
-        {stalls.length === 0 ? (
-          <Empty level="ok">Nothing stalled - every pending demo is fresh.</Empty>
-        ) : (
-          <DataList>
-            {stalls.map((s, i) => (
-              <StallRow key={s.id} s={s} hsBase={p.hsBase} now={now} last={i === stalls.length - 1} />
-            ))}
-          </DataList>
-        )}
-      </Card>
+      <QualityCard
+        accByMonth={p.acceptanceByMonth}
+        sqoWonByMonth={p.sqoToWonByMonth}
+        accYtd={p.acceptanceYtd}
+        sqoWonYtd={p.sqoToWonYtd}
+      />
+
+      <SegmentMixCard segmentMonthly={p.segmentMonthly} segmentSplit={p.segmentSplit} />
+
+      <ProgressionCard rows={p.progression} />
 
       <Card title="Points per month" right={<SectionLabel>{ytd} pts YTD</SectionLabel>} style={{ marginTop: 18 }}>
         <AreaChart

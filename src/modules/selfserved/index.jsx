@@ -418,6 +418,7 @@ export default function SelfServedModule() {
           <TabBar
             value={tab}
             onChange={setTab}
+            cycleShortcut
             tabs={[
               { id: "eligible", label: `Eligible · ${items.length}` },
               { id: "funnel", label: "Cohort audit" },
@@ -454,7 +455,8 @@ export default function SelfServedModule() {
             <div style={{
               display: "grid", gridTemplateColumns: LEAD_COLS, gap: 12,
               padding: "0 8px 10px", margin: "0 -8px",
-              borderBottom: `1px solid ${C.border}`,
+              borderBottom: "1px solid transparent",
+          borderImage: `linear-gradient(90deg, ${C.border} 70%, transparent) 1`,
             }}>
               <SectionLabel>Score</SectionLabel>
               <SectionLabel>Contact</SectionLabel>

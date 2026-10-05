@@ -7,7 +7,7 @@
 //
 // Card enforces that structurally: see NestContext below.
 
-import { Children, createContext, useContext, useState } from "react";
+import { Children, createContext, useContext, useEffect, useState } from "react";
 import { C, SEMANTIC, R, SHADOW, T, TRACK, NUM, FONT_SANS, FONT_MONO } from "../lib/tokens.js";
 import { CountUp, Reveal, useMountProgress } from "./viz.jsx";
 
@@ -131,22 +131,31 @@ export function Stat({ label, value, of, note, noteLevel, size = "hero", right, 
 export function StatRow({ children, cols }) {
   const n = cols || (Array.isArray(children) ? children.length : 1);
   const items = Array.isArray(children) ? children : [children];
+  // Rules fade at their ends instead of running edge to edge - the structure
+  // stays, the boxed-in feeling goes.
+  const hRule = `linear-gradient(90deg, transparent, ${C.border} 10%, ${C.border} 90%, transparent)`;
+  const vRule = `linear-gradient(180deg, transparent, ${C.border} 28%, ${C.border} 72%, transparent)`;
   return (
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))`,
-      borderTop: `1px solid ${C.border}`,
-      borderBottom: `1px solid ${C.border}`,
-    }}>
-      {items.map((child, i) => (
-        <div key={i} style={{
-          padding: `16px ${i === items.length - 1 ? 0 : 18}px 16px ${i === 0 ? 0 : 18}px`,
-          borderRight: i === items.length - 1 ? "none" : `1px solid ${C.border}`,
-          minWidth: 0,
-        }}>
-          {child}
-        </div>
-      ))}
+    <div>
+      <div style={{ height: 1, background: hRule }} />
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))`,
+      }}>
+        {items.map((child, i) => (
+          <div key={i} style={{
+            position: "relative",
+            padding: `16px ${i === items.length - 1 ? 0 : 18}px 16px ${i === 0 ? 0 : 18}px`,
+            minWidth: 0,
+          }}>
+            {child}
+            {i < items.length - 1 && (
+              <span style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 1, background: vRule }} />
+            )}
+          </div>
+        ))}
+      </div>
+      <div style={{ height: 1, background: hRule }} />
     </div>
   );
 }
@@ -184,8 +193,8 @@ export function Badge({ children, level = "idle", color, mono, style }) {
       color: color || s.fill,
       background: s.bg,
       border: `1px solid ${s.border}`,
-      padding: "4px 8px",
-      borderRadius: R.xs + 2,
+      padding: "4px 9px",
+      borderRadius: R.pill,
       whiteSpace: "nowrap",
       ...style,
     }}>
@@ -248,8 +257,30 @@ export function DataRow({ children, onClick, last, style }) {
 // TabBar
 // ---------------------------------------------------------------------------
 // Segmented pills in a recessed track.
-export function TabBar({ tabs, value, onChange, size = "md", style }) {
+//
+// cycleShortcut: opt-in Tab / Shift+Tab cycling for the module's PRIMARY tab
+// bar. Cmd+Tab is reserved by macOS (app switcher) and never reaches the page,
+// so plain Tab is the closest reliable equivalent. Only one TabBar per mounted
+// module should set this - modules unmount on switch, so no cross-module clash.
+// Keystrokes originating in inputs/textareas/selects are left alone so form
+// focus traversal keeps working.
+export function TabBar({ tabs, value, onChange, size = "md", cycleShortcut = false, style }) {
   const fs = size === "sm" ? T.label : T.micro;
+  useEffect(() => {
+    if (!cycleShortcut) return;
+    const handler = (e) => {
+      if (e.key !== "Tab" || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target;
+      const tag = (t.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select" || t.isContentEditable) return;
+      e.preventDefault();
+      const ids = tabs.map((x) => x.id ?? x);
+      const i = ids.indexOf(value);
+      onChange(ids[(i + (e.shiftKey ? ids.length - 1 : 1)) % ids.length]);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [cycleShortcut, tabs, value, onChange]);
   return (
     <div style={{
       display: "inline-flex", gap: 3,

@@ -224,7 +224,9 @@ function Column({ col, deals, slaHours, now, totalAmt }) {
       <div style={{
         display: "flex", alignItems: "center", gap: 8,
         paddingBottom: 10,
-        borderBottom: `1px solid ${breaches ? SEMANTIC.risk.border : C.border}`,
+        // Fading hairline instead of an edge-to-edge rule - same move as StatRow.
+        borderBottom: "1px solid transparent",
+        borderImage: `linear-gradient(90deg, ${breaches ? SEMANTIC.risk.border : C.border}, transparent) 1`,
       }}>
         <StatusDot level={breaches ? "risk" : level} />
         <span style={{
@@ -414,7 +416,8 @@ function AeTab({ deals, slaHours }) {
       <div style={{
         display: "grid", gridTemplateColumns: AE_COLS, gap: 12,
         padding: "0 8px 9px", margin: "0 -8px",
-        borderBottom: `1px solid ${C.border}`,
+        borderBottom: "1px solid transparent",
+        borderImage: `linear-gradient(90deg, ${C.border} 70%, transparent) 1`,
         font: `500 ${T.label}px/1 ${FONT_SANS}`,
         letterSpacing: TRACK.label, textTransform: "uppercase", color: C.textFaint,
       }}>
@@ -570,6 +573,7 @@ export default function DealsModule() {
           <TabBar
             value={tab}
             onChange={setTab}
+            cycleShortcut
             tabs={[{ id: "board", label: "Board" }, { id: "ae", label: "By AE" }]}
           />
         }

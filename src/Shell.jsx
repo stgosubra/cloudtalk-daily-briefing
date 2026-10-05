@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { C, R, SHADOW, T, TRACK, FONT_SANS, FONT_MONO, FONT_DISPLAY } from "./lib/tokens.js";
 import { PROFILE } from "./config.js";
 import { MODULES } from "./lib/modules.js";
@@ -43,6 +43,34 @@ export default function Shell() {
   });
 
   const [paletteOpen, setPaletteOpen] = useState(false);
+
+  // Radial fan: when the rail is collapsed, hovering it deploys the modules as
+  // a circular arc of icon buttons. Closes on leave or when the rail expands.
+  // The arc is anchored to the vertical center of the numbers list, measured on
+  // open, so the fan sits in line with the numbers instead of mid-viewport.
+  const [fanOpen, setFanOpen] = useState(false);
+  const [fanY, setFanY] = useState(null);
+  const navRef = useRef(null);
+  const asideRef = useRef(null);
+  useEffect(() => { if (!collapsed) setFanOpen(false); }, [collapsed]);
+  const openFan = () => {
+    if (!collapsed) return;
+    if (navRef.current && asideRef.current) {
+      const navRect = navRef.current.getBoundingClientRect();
+      const asideRect = asideRef.current.getBoundingClientRect();
+      // Center of the rendered nav buttons, not the flex-grown nav element -
+      // the <nav> stretches to fill the rail, the buttons sit at its top.
+      const buttons = navRef.current.querySelectorAll("button");
+      if (buttons.length) {
+        const first = buttons[0].getBoundingClientRect();
+        const last = buttons[buttons.length - 1].getBoundingClientRect();
+        setFanY((first.top + last.bottom) / 2 - asideRect.top);
+      } else {
+        setFanY(navRect.top + navRect.height / 2 - asideRect.top);
+      }
+    }
+    setFanOpen(true);
+  };
 
   // Count of triggered self-served onboarding/upsell alerts (3-30 day band).
   const ssAlertCount = onboardingAlertCount();
@@ -99,18 +127,23 @@ export default function Shell() {
       fontFamily: FONT_SANS,
     }}>
       {/* LEFT RAIL */}
-      <aside style={{
-        width: railWidth,
-        flexShrink: 0,
-        background: C.surface,
-        borderRight: `1px solid ${C.border}`,
-        display: "flex",
-        flexDirection: "column",
-        position: "sticky",
-        top: 0,
-        height: "100vh",
-        transition: "width 160ms ease",
-      }}>
+      <aside
+        ref={asideRef}
+        onMouseEnter={openFan}
+        onMouseLeave={() => setFanOpen(false)}
+        style={{
+          width: railWidth,
+          flexShrink: 0,
+          background: C.surface,
+          borderRight: `1px solid ${C.border}`,
+          display: "flex",
+          flexDirection: "column",
+          position: "sticky",
+          top: 0,
+          height: "100vh",
+          transition: "width 160ms ease",
+          zIndex: 20,
+        }}>
         {/* Brand */}
         <div style={{
           padding: collapsed ? "18px 0" : "18px 16px",
@@ -158,7 +191,7 @@ export default function Shell() {
         </div>
 
         {/* Nav */}
-        <nav style={{ flex: 1, overflowY: "auto", padding: collapsed ? "6px 8px" : "6px 10px" }}>
+        <nav ref={navRef} style={{ flex: 1, overflowY: "auto", padding: collapsed ? "6px 8px" : "6px 10px" }}>
           {NAV.map((item) => {
             const isActive = item.id === activeId;
             const accent = C[item.accent] || C.blue;
@@ -282,6 +315,17 @@ export default function Shell() {
             </div>
           )}
         </div>
+
+        {collapsed && (
+          <RadialNav
+            nav={NAV}
+            activeId={activeId}
+            open={fanOpen}
+            anchorY={fanY}
+            onSelect={(id) => { setActiveId(id); setFanOpen(false); }}
+            alertCount={ssAlertCount}
+          />
+        )}
       </aside>
 
       {/* CONTENT */}
@@ -294,6 +338,104 @@ export default function Shell() {
       {paletteOpen && (
         <CommandPalette nav={NAV} activeId={activeId} onSelect={goTo} onClose={() => setPaletteOpen(false)} />
       )}
+    </div>
+  );
+}
+
+// Radial module fan for the collapsed rail. Icons deploy on an arc opening into
+// the content area, staggered outward on open and folding back inward on close.
+// Pure CSS transitions - no animation deps in the shell. Buttons are children of
+// the sticky aside, so hovering them keeps the aside's mouseleave from firing.
+function RadialNav({ nav, activeId, open, anchorY, onSelect, alertCount }) {
+  const n = nav.length;
+  const START = -68, END = 68; // degrees; 0 points right, into the content
+  const RADIUS = 148;
+  const SIZE = 50;
+  return (
+    <div style={{ position: "absolute", left: 32, top: anchorY ?? "50%", zIndex: 150 }}>
+      {/* scrim: lifts the fan off the module content underneath. It is also the
+          hover-keeper - while the fan is open it accepts pointer events, so the
+          aside's mouseleave never fires as the cursor crosses the gap between
+          the rail and the fan buttons. Clicks on it just fold the fan. */}
+      <span
+        onClick={() => onSelect(activeId)}
+        style={{
+          position: "absolute", left: -120, top: -260, width: 480, height: 520,
+          borderRadius: "50%",
+          pointerEvents: open ? "auto" : "none",
+          background: "radial-gradient(closest-side, rgba(8,5,14,0.88), rgba(8,5,14,0.55) 55%, transparent)",
+          opacity: open ? 1 : 0,
+          transition: "opacity 220ms ease",
+        }} />
+      {/* hub node the arc visually emanates from */}
+      <span style={{
+        position: "absolute", left: -5, top: -5, width: 10, height: 10,
+        borderRadius: "50%",
+        background: `linear-gradient(140deg, ${C.blue}, ${C.purple})`,
+        boxShadow: `0 0 12px ${C.purple}99`,
+        opacity: open ? 1 : 0,
+        transform: open ? "scale(1)" : "scale(0.4)",
+        transition: "opacity 180ms ease, transform 180ms ease",
+        pointerEvents: "none",
+      }} />
+      {nav.map((item, i) => {
+        const deg = START + (END - START) * (n === 1 ? 0.5 : i / (n - 1));
+        const rad = (deg * Math.PI) / 180;
+        const x = Math.cos(rad) * RADIUS;
+        const y = Math.sin(rad) * RADIUS;
+        const isActive = item.id === activeId;
+        const accent = C[item.accent] || C.blue;
+        const alert = item.id === "selfserved" && alertCount > 0;
+        // Stagger: fan out hub-first, fold back tips-first.
+        const delay = open ? i * 26 : (n - 1 - i) * 14;
+        return (
+          <button
+            key={item.id}
+            onClick={() => onSelect(item.id)}
+            title={`${item.num} ${item.label} - ${item.sub}`}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = `translate(${x}px, ${y}px) scale(1.12)`; }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = `translate(${x}px, ${y}px) scale(1)`; }}
+            style={{
+              position: "absolute",
+              left: -SIZE / 2, top: -SIZE / 2,
+              width: SIZE, height: SIZE, borderRadius: "50%",
+              display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", gap: 1,
+              background: isActive
+                ? `linear-gradient(135deg, ${accent}33, ${C.surface})`
+                : C.surface,
+              border: `1px solid ${isActive ? `${accent}66` : C.borderStrong}`,
+              boxShadow: isActive
+                ? `0 0 18px -4px ${accent}B3, 0 12px 32px -12px rgba(0,0,0,0.85)`
+                : `0 12px 32px -12px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,255,255,0.05)`,
+              color: isActive ? accent : C.textMuted,
+              cursor: "pointer",
+              padding: 0,
+              pointerEvents: open ? "auto" : "none",
+              opacity: open ? 1 : 0,
+              transform: open
+                ? `translate(${x}px, ${y}px) scale(1)`
+                : "translate(0px, 0px) scale(0.3)",
+              transition: `transform 300ms cubic-bezier(0.22,1,0.36,1) ${delay}ms, opacity 200ms ease ${delay}ms, box-shadow 160ms ease`,
+            }}
+          >
+            <span style={{ display: "flex" }}>{ModuleIcon[item.id]}</span>
+            <span style={{
+              fontFamily: FONT_MONO, fontSize: 7.5, letterSpacing: 0.5, lineHeight: 1,
+              color: isActive ? accent : C.textFaint,
+            }}>
+              {item.num}
+            </span>
+            {alert && (
+              <span style={{
+                position: "absolute", top: 2, right: 3,
+                width: 7, height: 7, borderRadius: "50%",
+                background: C.amber, boxShadow: `0 0 6px ${C.amber}`,
+              }} />
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -593,7 +593,8 @@ function OfficeTab({ label, region, members, actuals, workingDays }) {
         <div style={{
           display: "grid", gridTemplateColumns: SDR_COLS, gap: 12,
           padding: "0 8px 10px", margin: "0 -8px",
-          borderBottom: `1px solid ${C.border}`,
+          borderBottom: "1px solid transparent",
+          borderImage: `linear-gradient(90deg, ${C.border} 70%, transparent) 1`,
         }}>
           <SectionLabel>SDR</SectionLabel>
           <SectionLabel>SQL created</SectionLabel>
@@ -713,7 +714,8 @@ function PreviousTab() {
           <div style={{
             display: "grid", gridTemplateColumns: SDR_COLS, gap: 12,
             padding: "0 8px 10px", margin: "0 -8px",
-            borderBottom: `1px solid ${C.border}`,
+            borderBottom: "1px solid transparent",
+          borderImage: `linear-gradient(90deg, ${C.border} 70%, transparent) 1`,
           }}>
             <SectionLabel>SDR</SectionLabel>
             <SectionLabel>SQL created</SectionLabel>
@@ -821,6 +823,7 @@ export default function PacingModule() {
           <TabBar
             value={tab}
             onChange={setTab}
+            cycleShortcut
             tabs={[
               { id: "team", label: "Team forecast" },
               { id: "bcn", label: `Barcelona · ${bcn.length}` },

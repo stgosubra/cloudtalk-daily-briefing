@@ -44,7 +44,7 @@ export default function CalculatorModule({ intent }) {
             Calculator
           </span>
         </div>
-        <TabBar tabs={TABS} value={tab} onChange={setTab} size="sm" />
+        <TabBar tabs={TABS} value={tab} onChange={setTab} size="sm" cycleShortcut />
       </div>
       <div style={{ flex: 1, minHeight: 0 }}>
         {tab === "minutes" ? <MinutesCalc /> : <CostCalc />}

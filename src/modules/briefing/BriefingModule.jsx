@@ -970,43 +970,97 @@ function Timeline({ prospects, otherEvents }) {
   const hours = Array.from({ length: 12 }, (_, i) => 7 + i);
   const pct = (t) => Math.max(0, Math.min(100, ((toMin(t) - DAY_START) / DAY_SPAN) * 100));
   const wPct = (s, e) => Math.max(0.5, pct(e) - pct(s));
-  const calls = prospects.filter((m) => !m.canceled).map((m) => ({ name: m.name.split(" ")[0], start: m.start, end: m.end }));
+  const calls = prospects.filter((m) => !m.canceled).map((m) => ({ name: m.name.split(" ")[0], start: m.start, end: m.end, color: C.blue }));
   const palMap = { amber: C.amber, purple: C.purple, cyan: C.cyan, emerald: C.emerald, red: C.red };
   const others = otherEvents.map((e) => ({ name: e.name.split(" ")[0], start: e.start, end: e.end, color: palMap[e.color] || C.purple }));
+
+  // State-aware pill: past events recede, the live one glows, upcoming sit
+  // ready. The timeline reads as "where am I in the day" at a glance instead
+  // of a flat row of identical rectangles.
+  const Block = ({ b, lane, i }) => {
+    const s = toMin(b.start), e = toMin(b.end);
+    const live = nowMin >= s && nowMin < e;
+    const past = e <= nowMin;
+    return (
+      <motion.div
+        title={`${b.name} ${b.start}-${b.end}`}
+        initial={{ opacity: 0, scaleY: 0.4 }}
+        animate={{ opacity: 1, scaleY: 1 }}
+        transition={{ delay: 0.12 + i * 0.05, duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+        style={{
+          position: "absolute", top: lane === 0 ? 4 : 28,
+          left: `${pct(b.start)}%`, width: `${wPct(b.start, b.end)}%`,
+          height: 18, borderRadius: 9, overflow: "hidden",
+          background: past
+            ? `linear-gradient(180deg, ${b.color}33, ${b.color}1F)`
+            : `linear-gradient(180deg, ${b.color}E6, ${b.color}8C)`,
+          border: `1px solid ${past ? `${b.color}40` : `${b.color}B3`}`,
+          boxShadow: live ? `0 0 14px -2px ${b.color}CC` : "none",
+          animation: live ? "ct-pulse 2.4s ease-in-out infinite" : "none",
+        }}
+      >
+        <span style={{
+          fontFamily: FONT_MONO, fontSize: 8.5, fontWeight: 600,
+          color: past ? C.textHint : C.bg,
+          padding: "0 6px", lineHeight: "17px", whiteSpace: "nowrap",
+          overflow: "hidden", textOverflow: "ellipsis", display: "block",
+        }}>
+          {b.name}
+        </span>
+      </motion.div>
+    );
+  };
+
   return (
     <div style={{ marginBottom: 24, background: C.surface, border: `1px solid ${C.border}`, padding: "14px 16px", borderRadius: 10, boxShadow: CARD_SHADOW }}>
       <div style={{ fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 0.7, textTransform: "uppercase", color: C.textHint, marginBottom: 10 }}>Day timeline</div>
-      <div style={{ position: "relative", height: 48 }}>
+      <div style={{ position: "relative", height: 66 }}>
+        {/* Elapsed part of the day recedes behind a faint wash, so "now" splits
+            the strip visually before you even find the marker. */}
+        {nowMin > DAY_START && (
+          <div style={{
+            position: "absolute", left: 0, top: 0, bottom: 16,
+            width: `${nowPct}%`, borderRadius: 6,
+            background: "rgba(255,255,255,0.025)",
+          }} />
+        )}
         {hours.map((h) => {
           const p = ((h * 60 - DAY_START) / DAY_SPAN) * 100;
           return (
-            <div key={h} style={{ position: "absolute", left: `${p}%`, top: 0, bottom: 0, borderLeft: `1px solid ${C.border}`, opacity: 0.7 }}>
-              <span style={{ position: "absolute", top: 34, left: 2, fontFamily: FONT_MONO, fontSize: 8, color: C.textHint, transform: "translateX(-50%)" }}>{h}h</span>
+            <div key={h} style={{ position: "absolute", left: `${p}%`, top: 0, bottom: 16 }}>
+              <div style={{ position: "absolute", top: 0, bottom: 0, borderLeft: `1px dashed ${C.border}`, opacity: 0.45 }} />
+              <span style={{ position: "absolute", bottom: -14, fontFamily: FONT_MONO, fontSize: 8, color: C.textFaint, transform: "translateX(-50%)" }}>{h}h</span>
             </div>
           );
         })}
-        {calls.map((b, i) => (
-          <div key={i} title={`${b.name} ${b.start}`}
-            style={{ position: "absolute", top: 2, left: `${pct(b.start)}%`, width: `${wPct(b.start, b.end)}%`, height: 14, background: C.blue, opacity: 0.9, overflow: "hidden", borderRadius: 2 }}>
-            <span style={{ fontFamily: FONT_MONO, fontSize: 8, color: C.bg, padding: "0 3px", lineHeight: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", fontWeight: 600 }}>{b.name}</span>
-          </div>
-        ))}
-        {others.map((b, i) => (
-          <div key={i} title={b.name}
-            style={{ position: "absolute", top: 18, left: `${pct(b.start)}%`, width: `${wPct(b.start, b.end)}%`, height: 14, background: b.color, opacity: 0.75, overflow: "hidden", borderRadius: 2 }}>
-            <span style={{ fontFamily: FONT_MONO, fontSize: 8, color: C.bg, padding: "0 3px", lineHeight: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", fontWeight: 600 }}>{b.name}</span>
-          </div>
-        ))}
+        {calls.map((b, i) => <Block key={`c${i}`} b={b} lane={0} i={i} />)}
+        {others.map((b, i) => <Block key={`o${i}`} b={b} lane={1} i={calls.length + i} />)}
         {nowMin >= DAY_START && nowMin <= DAY_END && (
-          <div style={{ position: "absolute", left: `${nowPct}%`, top: 0, bottom: 0, borderLeft: `2px solid ${C.red}`, zIndex: 10 }}>
-            <div style={{ position: "absolute", top: -1, left: -3, width: 6, height: 6, borderRadius: "50%", background: C.red }} />
+          <div style={{
+            position: "absolute", left: `${nowPct}%`, top: -2, bottom: 14, zIndex: 10,
+            width: 2, borderRadius: 1,
+            background: `linear-gradient(180deg, ${C.red}, ${C.red}26)`,
+            boxShadow: `0 0 8px ${C.red}80`,
+          }}>
+            <div style={{
+              position: "absolute", top: -3, left: -2.5, width: 7, height: 7,
+              borderRadius: "50%", background: C.red,
+              boxShadow: `0 0 8px ${C.red}CC`,
+              animation: "ct-pulse 2s ease-in-out infinite",
+            }} />
           </div>
         )}
       </div>
-      <div style={{ marginTop: 8, display: "flex", gap: 14 }}>
-        <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textMuted }}><span style={{ color: C.blue }}>■</span> Calls</span>
-        <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textMuted }}><span style={{ color: C.purple }}>■</span> Other</span>
-        <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.red }}>| Now</span>
+      <div style={{ marginTop: 12, display: "flex", gap: 16, alignItems: "center" }}>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textMuted, display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <span style={{ width: 10, height: 5, borderRadius: 3, background: C.blue }} /> Calls
+        </span>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textMuted, display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <span style={{ width: 10, height: 5, borderRadius: 3, background: C.purple }} /> Other
+        </span>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.red, display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <span style={{ width: 5, height: 5, borderRadius: "50%", background: C.red, boxShadow: `0 0 6px ${C.red}` }} /> Now
+        </span>
       </div>
     </div>
   );

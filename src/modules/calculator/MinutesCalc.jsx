@@ -299,23 +299,23 @@ const CSS = `
 .mcalc .fblock{margin-bottom:15px}
 .mcalc .flabel{font-size:11px;color:var(--muted);margin-bottom:5px;line-height:1.5}
 .mcalc .flabel span{color:var(--muted2)}
-.mcalc .g-input{width:100%;height:35px;background:var(--surf2);border:1px solid var(--bdr2);border-radius:9px;padding:0 12px;font-size:13px;color:var(--txt);outline:none;transition:border-color .18s,box-shadow .18s;-webkit-appearance:none;appearance:none}
+.mcalc .g-input{width:100%;height:35px;background:var(--surf2);border:1px solid var(--bdr2);border-radius:11px;padding:0 13px;font-size:13px;color:var(--txt);outline:none;transition:border-color .18s,box-shadow .18s;-webkit-appearance:none;appearance:none}
 .mcalc .g-input:focus{border-color:var(--bdr3);box-shadow:0 0 0 3px var(--glow)}
 .mcalc .g-input::placeholder{color:var(--muted2)}
-.mcalc .seg{display:flex;gap:3px;margin-bottom:10px}
-.mcalc .seg-btn{flex:1;height:28px;border-radius:7px;border:1px solid var(--bdr);background:var(--surf);color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s}
-.mcalc .seg-btn:hover{border-color:var(--bdr2);color:var(--acc2)}
-.mcalc .seg-btn.on{background:var(--acc3);border-color:var(--bdr3);color:var(--acc2)}
-.mcalc .dir-row{display:flex;gap:3px;margin-bottom:9px}
-.mcalc .dir-btn{flex:1;height:28px;border-radius:7px;border:1px solid var(--bdr);background:var(--surf);color:var(--muted);font-size:11px;font-weight:500;cursor:pointer;transition:all .15s}
-.mcalc .dir-btn:hover{border-color:var(--bdr2);color:var(--acc2)}
-.mcalc .dir-btn.on{background:var(--acc3);border-color:var(--bdr3);color:var(--acc2)}
+.mcalc .seg{display:flex;gap:3px;margin-bottom:10px;background:var(--surf);border:1px solid var(--bdr);border-radius:999px;padding:3px}
+.mcalc .seg-btn{flex:1;height:24px;border-radius:999px;border:none;background:transparent;color:var(--muted);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s}
+.mcalc .seg-btn:hover{color:var(--acc2)}
+.mcalc .seg-btn.on{background:var(--acc3);color:var(--acc2);box-shadow:inset 0 0 0 1px var(--bdr3)}
+.mcalc .dir-row{display:flex;gap:3px;margin-bottom:9px;background:var(--surf);border:1px solid var(--bdr);border-radius:999px;padding:3px}
+.mcalc .dir-btn{flex:1;height:24px;border-radius:999px;border:none;background:transparent;color:var(--muted);font-size:11px;font-weight:500;cursor:pointer;transition:all .15s}
+.mcalc .dir-btn:hover{color:var(--acc2)}
+.mcalc .dir-btn.on{background:var(--acc3);color:var(--acc2);box-shadow:inset 0 0 0 1px var(--bdr3)}
 .mcalc .sub-in{display:flex;align-items:center;gap:8px;margin-top:5px}
 .mcalc .sub-in label{font-size:11px;color:var(--muted);min-width:64px;flex-shrink:0}
-.mcalc .sub-in input{flex:1;height:30px;background:var(--surf);border:1px solid var(--bdr2);border-radius:7px;padding:0 9px;font-size:12px;color:var(--txt);outline:none;transition:border-color .15s;-webkit-appearance:none;appearance:none}
+.mcalc .sub-in input{flex:1;height:30px;background:var(--surf);border:1px solid var(--bdr2);border-radius:10px;padding:0 10px;font-size:12px;color:var(--txt);outline:none;transition:border-color .15s;-webkit-appearance:none;appearance:none}
 .mcalc .sub-in input:focus{border-color:var(--bdr3)}
 .mcalc .sub-in input::placeholder{color:var(--muted2)}
-.mcalc .divline{height:1px;background:var(--bdr);margin:13px 0}
+.mcalc .divline{height:1px;background:linear-gradient(90deg,transparent,var(--bdr) 12%,var(--bdr) 88%,transparent);margin:13px 0}
 .mcalc .right{padding:20px 18px;background:var(--bg2);display:flex;flex-direction:column;gap:11px}
 .mcalc .glass-hero{border:1px solid rgba(59,130,246,0.24);border-radius:14px;padding:20px 22px;position:relative;overflow:hidden;background:linear-gradient(135deg,rgba(59,130,246,0.11) 0%,rgba(59,130,246,0.03) 100%)}
 .mcalc .glass-hero::after{content:'';position:absolute;top:-50px;right:-50px;width:160px;height:160px;border-radius:50%;background:rgba(59,130,246,0.05);pointer-events:none}

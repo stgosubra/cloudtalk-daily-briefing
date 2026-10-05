@@ -22,11 +22,10 @@ import { DEALS } from "../deals/data.js";
 import { TILE_MODULES } from "../../lib/modules.js";
 import { OWNER } from "../../config.js";
 import {
-  Page, SectionLabel, Stat, StatRow, StatusDot, DataList, DataRow, Empty,
+  Page, SectionLabel, StatusDot, DataList, DataRow, Empty,
 } from "../../design/ui.jsx";
-import { Gauge, CountUp, Sparkline } from "../../design/viz.jsx";
+import { Gauge, CountUp, Sparkline, useMountProgress } from "../../design/viz.jsx";
 import { C, R, T, TRACK, NUM, SEMANTIC, LEVEL_ORDER, FONT_SANS, FONT_MONO } from "../../lib/tokens.js";
-import { ModuleIcon } from "../../design/icons.jsx";
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -209,12 +208,13 @@ function LadderItem({ alert, rank, onNavigate }) {
     <button
       onClick={() => onNavigate?.(alert.module)}
       style={{
-        display: "flex", alignItems: "flex-start", gap: 14,
+        position: "relative", overflow: "hidden",
+        display: "flex", alignItems: "flex-start", gap: 16,
         width: "100%", textAlign: "left", cursor: "pointer",
         background: `linear-gradient(135deg, ${s.bg}, transparent 70%)`,
         border: `1px solid ${s.border}`,
         borderRadius: R.lg,
-        padding: "15px 16px",
+        padding: "16px 18px 16px 21px",
         color: C.text, font: `400 ${T.body}px/1.4 ${FONT_SANS}`,
         transform: "none",
         transition: "border-color 120ms ease, transform 180ms cubic-bezier(0.22,1,0.36,1)",
@@ -229,9 +229,16 @@ function LadderItem({ alert, rank, onNavigate }) {
       }}
       onMouseDown={(e) => { e.currentTarget.style.transform = "none"; }}
     >
+      {/* severity edge: a thin lit bar keyed to the alert level */}
       <span style={{
-        font: `500 ${T.label}px/1 ${FONT_MONO}`, color: s.fill,
-        paddingTop: 3, letterSpacing: TRACK.label, flex: "none",
+        position: "absolute", left: 0, top: 0, bottom: 0, width: 3,
+        background: `linear-gradient(180deg, ${s.fill}, ${s.fill}26)`,
+        boxShadow: `0 0 10px ${s.fill}66`,
+      }} />
+      <span style={{
+        font: `600 21px/1 ${FONT_MONO}`, color: s.fill,
+        paddingTop: 1, letterSpacing: TRACK.tight, flex: "none",
+        opacity: 0.9,
       }}>
         {String(rank).padStart(2, "0")}
       </span>
@@ -258,75 +265,60 @@ function LadderItem({ alert, rank, onNavigate }) {
   );
 }
 
-function Tile({ tile, onNavigate }) {
-  const accent = C[tile.accent] || C.blue;
+// The instrument strip. One quiet mono line carries what used to be four stat
+// cells - same facts, a fifth of the height. Each segment deep-links into the
+// module that owns the number. The hairlines draw themselves on mount, the
+// values count up: the strip reads like avionics coming online.
+function Ticker({ items, onNavigate }) {
+  const p = useMountProgress(900, 250);
+  const hairline = `linear-gradient(90deg, transparent, ${C.border} 8%, ${C.border} 92%, transparent)`;
   return (
-    <button
-      onClick={() => onNavigate?.(tile.id)}
-      style={{
-        textAlign: "left", cursor: "pointer",
-        background: C.cardBg,
-        border: `1px solid ${C.border}`,
-        borderRadius: R.lg,
-        padding: 16,
-        color: C.text, fontFamily: FONT_SANS,
-        display: "flex", flexDirection: "column", gap: 12,
-        transform: "none",
-        transition: "background 120ms ease, border-color 120ms ease, transform 180ms cubic-bezier(0.22,1,0.36,1), box-shadow 180ms ease",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = C.cardBgHover;
-        e.currentTarget.style.borderColor = `${accent}4D`;
-        e.currentTarget.style.transform = "translateY(-2px)";
-        e.currentTarget.style.boxShadow = `0 14px 36px -16px rgba(0,0,0,0.7), 0 0 0 1px ${accent}1A`;
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = C.cardBg;
-        e.currentTarget.style.borderColor = C.border;
-        e.currentTarget.style.transform = "none";
-        e.currentTarget.style.boxShadow = "none";
-      }}
-      onMouseDown={(e) => { e.currentTarget.style.transform = "none"; }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{
-          width: 32, height: 32, borderRadius: R.md,
-          background: `linear-gradient(135deg, ${accent}2E, ${accent}12)`,
-          border: `1px solid ${accent}3D`,
-          color: accent,
-          display: "flex", alignItems: "center", justifyContent: "center", flex: "none",
-        }}>
-          {ModuleIcon[tile.id]}
-        </span>
-        <span style={{ minWidth: 0, flex: 1 }}>
-          <span style={{
-            display: "block", font: `500 ${T.body}px/1.2 ${FONT_SANS}`,
-            letterSpacing: TRACK.tight, color: C.text,
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          }}>
-            {tile.label}
+    <div style={{ marginTop: 28 }}>
+      <div style={{ height: 1, width: `${p * 100}%`, background: hairline }} />
+      <div style={{
+        display: "flex", alignItems: "baseline", flexWrap: "wrap",
+        gap: "10px 0", padding: "13px 2px",
+      }}>
+        {items.map((it, i) => (
+          <span key={it.label} style={{ display: "flex", alignItems: "baseline" }}>
+            {i > 0 && (
+              <span aria-hidden style={{
+                font: `400 ${T.micro}px/1 ${FONT_MONO}`, color: C.textFaint,
+                margin: "0 18px", opacity: 0.6,
+              }}>
+                ·
+              </span>
+            )}
+            <button
+              onClick={() => onNavigate?.(it.module)}
+              title={`Open ${it.module}`}
+              style={{
+                display: "flex", alignItems: "baseline", gap: 8,
+                background: "transparent", border: "none", padding: 0,
+                cursor: "pointer", opacity: 0.92,
+                transition: "opacity 120ms ease",
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.opacity = 1; }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = 0.92; }}
+            >
+              <span style={{
+                font: `600 ${T.bodyLg}px/1 ${FONT_MONO}`,
+                color: it.color || C.text, letterSpacing: TRACK.tight, ...NUM,
+              }}>
+                {it.value}
+              </span>
+              <span style={{
+                font: `400 ${T.label}px/1 ${FONT_MONO}`, color: C.textFaint,
+                letterSpacing: TRACK.label, textTransform: "uppercase",
+              }}>
+                {it.label}
+              </span>
+            </button>
           </span>
-          <span style={{
-            display: "block", font: `400 ${T.label}px/1 ${FONT_SANS}`,
-            letterSpacing: TRACK.label, textTransform: "uppercase",
-            color: C.textFaint, marginTop: 5,
-          }}>
-            {tile.sub}
-          </span>
-        </span>
-        <span style={{ font: `400 ${T.label}px/1 ${FONT_MONO}`, color: C.textFaint, flex: "none" }}>
-          {tile.num}
-        </span>
+        ))}
       </div>
-      {tile.signal && (
-        <div style={{
-          font: `400 ${T.micro}px/1.4 ${FONT_SANS}`, color: C.textMuted,
-          borderTop: `1px solid ${C.divider}`, paddingTop: 11,
-        }}>
-          {tile.signal}
-        </div>
-      )}
-    </button>
+      <div style={{ height: 1, width: `${p * 100}%`, background: hairline }} />
+    </div>
   );
 }
 
@@ -363,16 +355,17 @@ export default function DashboardModule({ onNavigate }) {
 
   const monthTrend = useMemo(() => (PERFORMANCE?.points ?? []).map((m) => m.points), []);
 
-  // The Today tile's signal is derived live rather than carried in the registry,
-  // so it can never disagree with what module 02 actually shows.
-  const tiles = useMemo(() => TILE_MODULES.map((m) => {
-    if (m.id !== "briefing") return m;
-    const other = WEEK_OTHER_EVENTS?.[TODAY_ISO]?.length ?? 0;
-    const bits = [];
-    if (callsToday) bits.push(plural(callsToday, "discovery call"));
-    if (other) bits.push(plural(other, "other event"));
-    return { ...m, signal: bits.length ? `${bits.join(" · ")} today` : "Nothing on the calendar today" };
-  }), [callsToday]);
+  const eligible = SELFSERVED?.funnel?.eligible ?? 0;
+  const ticker = [
+    { label: "calls today", module: "briefing",
+      value: <CountUp value={callsToday} duration={800} delay={350} /> },
+    { label: `of ${pacing.target ?? "-"} pts`, module: "performance", color: C.cyan,
+      value: <CountUp value={pacing.earned ?? 0} duration={800} delay={430} /> },
+    { label: `mrr ${DEALS?.monthLabel ?? ""}`, module: "deals", color: C.emerald,
+      value: <CountUp value={acceptedAmt} duration={800} delay={510} format={eur} /> },
+    { label: "re-engage", module: "selfserved", color: eligible > 0 ? C.amber : undefined,
+      value: <CountUp value={eligible} duration={800} delay={590} /> },
+  ];
 
   return (
     <Page>
@@ -388,8 +381,11 @@ export default function DashboardModule({ onNavigate }) {
           <SectionLabel>{today}</SectionLabel>
           <h1 style={{
             font: `600 34px/1.1 ${FONT_SANS}`,
-            letterSpacing: TRACK.tightest, color: C.text,
+            letterSpacing: TRACK.tightest,
             margin: "12px 0 0",
+            background: `linear-gradient(120deg, ${C.text} 55%, ${C.textMid})`,
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
           }}>
             {greeting()}, {OWNER.name.split(" ")[0]}.
           </h1>
@@ -418,14 +414,6 @@ export default function DashboardModule({ onNavigate }) {
               </>
             )}
           </div>
-          {monthTrend.length > 1 && (
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>
-              <Sparkline points={monthTrend} color={C.bloom} width={170} height={30} delay={260} />
-              <span style={{ font: `400 ${T.label}px/1 ${FONT_MONO}`, color: C.textFaint, letterSpacing: TRACK.label }}>
-                POINTS / MONTH
-              </span>
-            </div>
-          )}
         </div>
         <Gauge pct={month.pct} level={month.level} size={184} thickness={14} markerPct={month.expectedPct}>
           <div style={{ font: `600 ${T.hero}px/1 ${FONT_SANS}`, color: SEMANTIC[month.level].fill, letterSpacing: TRACK.tightest, ...NUM }}>
@@ -437,15 +425,16 @@ export default function DashboardModule({ onNavigate }) {
         </Gauge>
       </div>
 
-      <StatRow>
-        <Stat label="Calls today" value={callsToday} size="sm" note={callsToday ? "briefs written" : "clear calendar"} />
-        <Stat label="Points MTD" value={pacing.earned ?? 0} of={pacing.target ?? "-"} size="sm" valueColor={C.cyan}
-              note={`day ${pacing.dayOfMonth ?? "-"} of ${pacing.daysInMonth ?? "-"}`} />
-        <Stat label="Accepted MRR" value={eur(acceptedAmt)} size="sm" valueColor={C.emerald} note={DEALS?.monthLabel ?? ""} />
-        <Stat label="Re-engage queue" value={SELFSERVED?.funnel?.eligible ?? 0} size="sm"
-              valueColor={(SELFSERVED?.funnel?.eligible ?? 0) > 0 ? C.amber : undefined}
-              note="qualified, untouched" />
-      </StatRow>
+      <Ticker items={ticker} onNavigate={onNavigate} />
+
+      {monthTrend.length > 1 && (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 14 }}>
+          <Sparkline points={monthTrend} color={C.bloom} width={170} height={30} delay={500} />
+          <span style={{ font: `400 ${T.label}px/1 ${FONT_MONO}`, color: C.textFaint, letterSpacing: TRACK.label }}>
+            POINTS / MONTH
+          </span>
+        </div>
+      )}
 
       <div style={{ marginTop: 30 }}>
         <SectionLabel>Needs you</SectionLabel>
@@ -487,17 +476,6 @@ export default function DashboardModule({ onNavigate }) {
             </DataList>
           </div>
         )}
-      </div>
-
-      <div style={{ marginTop: 34 }}>
-        <SectionLabel>Modules</SectionLabel>
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(216px, 1fr))",
-          gap: 12, marginTop: 12,
-        }}>
-          {tiles.map((t) => <Tile key={t.id} tile={t} onNavigate={onNavigate} />)}
-        </div>
       </div>
 
       <div style={{

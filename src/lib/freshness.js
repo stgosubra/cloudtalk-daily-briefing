@@ -12,7 +12,6 @@
 import * as briefingData from "../modules/briefing/data.js";
 import * as performanceData from "../modules/performance/data.js";
 import * as selfservedData from "../modules/selfserved/data.js";
-import * as coachData from "../modules/coach/data.js";
 import * as pacingData from "../modules/pacing/data.js";
 import * as demosData from "../modules/demos/data.js";
 
@@ -20,9 +19,8 @@ const SOURCES = [
   { id: "briefing",    num: "01", label: "Today",       stamp: briefingData.GENERATED_AT },
   { id: "performance", num: "03", label: "Performance", stamp: performanceData.GENERATED_AT },
   { id: "selfserved",  num: "04", label: "Self-Served", stamp: selfservedData.GENERATED_AT },
-  { id: "coach",       num: "05", label: "Coach",       stamp: coachData.GENERATED_AT },
-  { id: "pacing",      num: "06", label: "SDR Pacing",  stamp: pacingData.GENERATED_AT },
-  { id: "demos",       num: "07", label: "Demos",       stamp: demosData.GENERATED_AT },
+  { id: "pacing",      num: "05", label: "SDR Pacing",  stamp: pacingData.GENERATED_AT },
+  { id: "demos",       num: "06", label: "Demos",       stamp: demosData.GENERATED_AT },
 ];
 
 function localDayKey(d) {

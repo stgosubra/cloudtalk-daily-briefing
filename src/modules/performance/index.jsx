@@ -162,16 +162,8 @@ function TabBar({ tab, setTab }) {
 
 // ─── Module root ────────────────────────────────────────────────────────────
 export default function PerformanceModule({ intent }) {
-  const VALID_TABS = ["pacing", "funnel", "period", "progression", "segments", "geo"];
-  const [tab, setTab] = useState(
-    intent?.tab && VALID_TABS.includes(intent.tab) ? intent.tab : "pacing"
-  );
   const [present, setPresent] = useState(true);
   const p = PERFORMANCE;
-
-  useEffect(() => {
-    if (intent?.tab && VALID_TABS.includes(intent.tab)) setTab(intent.tab);
-  }, [intent]);
 
   return (
     <MaskCtx.Provider value={present}>
@@ -192,26 +184,7 @@ export default function PerformanceModule({ intent }) {
         </div>
         <div style={{ height: 28 }} />
 
-        {/* ── Tabs (direction-aware) ───────────────────────────────────── */}
-        <TabBar tab={tab} setTab={setTab} />
-
-        {/* ── Tab content (AnimatePresence slide) ─────────────────────── */}
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={tab}
-            initial={{ opacity: 0, y: 10, filter: "blur(3px)" }}
-            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-            exit={{ opacity: 0, y: -6, filter: "blur(2px)" }}
-            transition={{ duration: 0.28, ease: "easeOut" }}
-          >
-            {tab === "pacing"      && <PacingView p={p} />}
-            {tab === "funnel"      && <FunnelView p={p} />}
-            {tab === "period"      && <PeriodView p={p} />}
-            {tab === "progression" && <ProgressionView p={p} />}
-            {tab === "segments"    && <SegmentsView p={p} />}
-            {tab === "geo"         && <GeoView p={p} />}
-          </motion.div>
-        </AnimatePresence>
+        <PacingView p={p} />
 
         {/* ── Source footnote ─────────────────────────────────────────── */}
         <div style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO, marginTop: 28, lineHeight: 1.6, borderTop: `1px solid ${C.line}`, paddingTop: 14 }}>

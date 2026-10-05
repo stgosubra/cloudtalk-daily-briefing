@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// SDR Pacing (module 06) data.js generator - Option A.
+// SDR Pacing (module 05) data.js generator - Option A.
 //
 //   node scripts/gen-pacing.mjs <payload.json> [dataPath]
 //
@@ -18,7 +18,7 @@ import { runGenerator, assertShape, readText, expectEqual } from "./lib/refresh-
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_PATH = resolve(__dirname, "../src/modules/pacing/data.js");
 
-const HEADER = `// SDR Pacing - module 06 data.
+const HEADER = `// SDR Pacing - module 05 data.
 // MACHINE-GENERATED each refresh by scripts/gen-pacing.mjs (Option A: Claude
 // pulls per-SDR SQL/SQO from HubSpot, merges with roster config). The component
 // (PacingModule) is never touched by a refresh.

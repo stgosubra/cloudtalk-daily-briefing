@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Self-Served (module 07) data.js generator - Option A.
+// Self-Served (module 04) data.js generator - Option A.
 //
 //   node scripts/gen-selfserved.mjs <payload.json> [dataPath]
 //

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Demos at Stake (module 07) data.js generator.
+// Demos at Stake (module 06) data.js generator.
 //
 //   node scripts/gen-demos.mjs <payload.json> [dataPath]
 //
@@ -13,7 +13,7 @@ import { runGenerator, assertShape, readText } from "./lib/refresh-core.mjs";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_PATH = resolve(__dirname, "../src/modules/demos/data.js");
 
-const HEADER = `// Demos at Stake - module 07 data.
+const HEADER = `// Demos at Stake - module 06 data.
 // MACHINE-GENERATED each refresh by scripts/gen-demos.mjs. The component
 // (DemosModule) is never touched by a refresh.
 `;

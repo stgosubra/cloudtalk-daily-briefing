@@ -9,7 +9,6 @@ import BriefingModule from "./modules/briefing/index.jsx";
 import CalculatorModule from "./modules/calculator/index.jsx";
 import PerformanceModule from "./modules/performance/index.jsx";
 import SelfServedModule from "./modules/selfserved/index.jsx";
-import CoachModule from "./modules/coach/index.jsx";
 import PacingModule from "./modules/pacing/index.jsx";
 import DemosModule from "./modules/demos/index.jsx";
 import { onboardingAlertCount } from "./modules/selfserved/data.js";
@@ -22,7 +21,6 @@ const COMPONENTS = {
   calculator: CalculatorModule,
   performance: PerformanceModule,
   selfserved: SelfServedModule,
-  coach: CoachModule,
   pacing: PacingModule,
   demos: DemosModule,
 };
@@ -160,7 +158,7 @@ export default function Shell() {
             const accent = C[item.accent] || C.blue;
             const accentBg = C[`${item.accent}Bg`] || C.blueBg;
             // Self-served onboarding/upsell alert: surface a warning on the nav label
-            // so a triggered alert is visible even when module 07 isn't open.
+            // so a triggered alert is visible even when module 04 isn't open.
             const navAlert =
               item.id === "selfserved" && !isActive && ssAlertCount > 0;
             return (
@@ -343,9 +341,6 @@ function DataGapsBanner() {
 const ACTIONS = [
   { kind: "action", id: "calculator", label: "Estimate a cost / quote",   sub: "Calculator", accent: "blue",   intent: { module: "calculator", tab: "cost" } },
   { kind: "action", id: "calculator", label: "Minutes calculator",        sub: "Calculator", accent: "blue",   intent: { module: "calculator", tab: "minutes" } },
-  { kind: "action", id: "performance", label: "My numbers this period",   sub: "Performance", accent: "emerald", intent: { module: "performance", tab: "period" } },
-  { kind: "action", id: "performance", label: "Performance progression",  sub: "Performance", accent: "emerald", intent: { module: "performance", tab: "progression" } },
-  { kind: "action", id: "performance", label: "SQO value by geo",         sub: "Performance", accent: "emerald", intent: { module: "performance", tab: "geo" } },
 ];
 
 function CommandPalette({ nav, activeId, onSelect, onClose }) {

@@ -286,7 +286,7 @@ export const COACH = {
 
 ---
 
-## Module 06 - SDR Pacing
+## Module 05 - SDR Pacing
 
 File: `src/modules/pacing/data.js`. Single export `PACING`. All counts via `/hs` GROUP BY across the full SDR roster.
 
@@ -351,19 +351,19 @@ Full run only (09:00). Not on top-up runs - pacing numbers move once a day at mo
 
 ---
 
-## Module 07 - Demos at Stake
+## Module 06 - Demos at Stake
 
 File: `src/modules/demos/data.js`. Single export `DEMOS`. Deal-level pull via `/hs`, enriched per-demo.
 
 ### What it tracks
 
-Demos booked on inbound-SDR deals across both offices. Tracks MRR at stake, segment mix, no-show rate, speed-to-demo, and per-SDR breakdown. Horizon window: 15 working days forward, 20 working days back, 8-week history.
+Demos booked on Santiago Subra's deals only (`deal_creator__sdr_only_ = '87191703'`). Tracks MRR at stake, segment mix, no-show rate, and speed-to-demo. Horizon window: 15 working days forward, 20 working days back, 8-week history.
 
 ### Cohort
 
 A demo is an inbound-SDR deal with a booked demo slot (`demo_call__date_time_` is set):
 
-- `deal_creator__sdr_only_` IN `(<all roster owner IDs>)` - team-wide, not just the operator
+- `deal_creator__sdr_only_` = `'87191703'` (Santiago Subra only)
 - `demo_call__date_time_` within the pull window (20 working days back through 15 working days forward from today)
 - Exclude deals already past AE acceptance with > 24h grace: if `deal_accepted_by_ae = 'true'` AND `accepted_deal__date_time_` < today - 1 day, skip
 
@@ -379,7 +379,7 @@ Use `search_crm_objects` (not `query_crm_data`) because individual deal records 
 {
   "filterGroups": [{
     "filters": [
-      { "propertyName": "deal_creator__sdr_only_", "operator": "IN", "values": ["<all roster IDs>"] },
+      { "propertyName": "deal_creator__sdr_only_", "operator": "EQ", "value": "87191703" },
       { "propertyName": "demo_call__date_time_", "operator": "BETWEEN", "value": "<window_start_epoch_ms>", "highValue": "<window_end_epoch_ms>" }
     ]
   }]
@@ -390,14 +390,14 @@ Use `search_crm_objects` (not `query_crm_data`) because individual deal records 
 
 For each deal returned:
 
-1. **SDR name** - look up `deal_creator__sdr_only_` in the roster from `demos.config.js`.
+1. **SDR name** - always "Santiago Subra" (single-operator scope).
 2. **AE name** - `hubspot_owner_id` is the current owner (AE after handoff). Look up owner name via `search_owners`.
 3. **Segment** - apply `segOf(amount_in_home_currency)` from `demos.config.js`: micro < 500, smb 500-1500, mm > 1500, none if null.
 4. **No-show status** - apply `noShowState(demo_no_show_status)` from `demos.config.js`: "ok", "noshow", or "rescheduled".
 5. **Speed-to-demo** - working hours between `createdate` and `demo_call__date_time_`, weekends excluded. `slow = speedH >= 48`.
 6. **In play** - `true` unless `ns === "noshow"` or deal is in a won/lost stage (stage IDs from `demos.config.js`).
 7. **Closed** - if dealstage is in `WON_STAGES` -> "won"; in `LOST_STAGES` -> "lost"; else `null`.
-8. **Office** - from roster lookup on `deal_creator__sdr_only_`.
+8. **Office** - always "BCN" (single-operator scope).
 9. **Key** - ISO date portion of `demo_call__date_time_` (the calendar day the demo is booked on).
 10. **Time** - HH:MM portion of `demo_call__date_time_`, converted to the office's local timezone (BCN -> Europe/Madrid, TOR -> America/Toronto).
 
@@ -427,7 +427,7 @@ For each deal returned:
     url: "https://app.hubspot.com/contacts/6195055/record/0-2/<dealId>"
   }],
   roster: {
-    "<ownerId>": { name: "Name", office: "BCN" | "TOR", lead: false }
+    "87191703": { name: "Santiago Subra", office: "BCN", lead: false }
   }
 }
 ```

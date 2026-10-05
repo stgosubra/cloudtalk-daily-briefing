@@ -122,17 +122,6 @@ function KV({ label, value, warn, title }) {
   );
 }
 
-function OfficeSplit({ label, tz, count, mrr, hidden }) {
-  if (hidden) return null;
-  return (
-    <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", background: C.surface }}>
-      <div style={{ fontSize: 11.5, color: C.textHint, display: "flex", justifyContent: "space-between" }}><span>{label}</span><span>{tz}</span></div>
-      <div style={{ fontSize: 22, fontWeight: 600, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>
-        {count}<small style={{ fontSize: 13, color: C.textMuted, fontWeight: 500, marginLeft: 4 }}>{eur(mrr)}</small>
-      </div>
-    </div>
-  );
-}
 
 // ─── HorizonDay ─────────────────────────────────────────────────────────────
 function HorizonDay({ k, rows, isToday, isPast, isSelected, onClick }) {
@@ -190,55 +179,6 @@ function SegmentBreakdown({ rows, label }) {
   );
 }
 
-// ─── SDR Breakdown ──────────────────────────────────────────────────────────
-function SdrBreakdown({ rows, roster, label, onSdrClick, activeSdr }) {
-  const ids = Object.keys(roster);
-  rows.forEach((r) => { if (!ids.includes(r.sdrId)) ids.push(r.sdrId); });
-  const stats = ids.map((id) => {
-    const rr = rows.filter((r) => r.sdrId === id);
-    const ro = roster[id] || { name: "SDR " + id, office: "—" };
-    return { id, name: ro.name, office: ro.office, lead: !!ro.lead, rows: rr, n: rr.length, m: sum(rr, (r) => r.amt) };
-  }).sort((a, b) => b.n - a.n || b.m - a.m || a.name.localeCompare(b.name));
-  const max = Math.max(...stats.map((s) => s.n), 1);
-
-  return (
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: "16px 18px", minWidth: 0 }}>
-      <h3 style={{ fontFamily: FONT_DISPLAY, fontSize: 14, fontWeight: 600, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        By SDR <span style={{ fontWeight: 400, color: C.textMuted, fontSize: 12.5 }}>{label}</span>
-      </h3>
-      <div style={{ display: "grid", gap: 7 }}>
-        {stats.map((s) => {
-          const by = segRows(s.rows);
-          return (
-            <div
-              key={s.id}
-              onClick={() => onSdrClick(activeSdr === s.id ? "ALL" : s.id)}
-              style={{
-                display: "grid", gridTemplateColumns: "150px 1fr 36px 72px", gap: 10, alignItems: "center",
-                fontSize: 13, cursor: "pointer", borderRadius: 4, padding: "2px 4px",
-                opacity: s.n ? 1 : 0.55, background: activeSdr === s.id ? accentBg : "transparent",
-              }}
-            >
-              <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                <b style={{ fontWeight: 500 }}>{s.name}</b>
-                <em style={{ fontStyle: "normal", color: C.textHint, fontSize: 11, marginLeft: 6, letterSpacing: "0.04em" }}>
-                  {s.office}{s.lead ? " - Lead" : ""}
-                </em>
-              </span>
-              <div style={{ height: 10, borderRadius: 5, background: C.surfaceAlt, display: "flex", gap: 2, overflow: "hidden" }}>
-                {["micro", "smb", "mm", "none"].map((k) =>
-                  by[k].length ? <span key={k} style={{ display: "block", height: "100%", width: `${(by[k].length / max) * 100}%`, background: segColor[k] }} /> : null,
-                )}
-              </div>
-              <span style={{ textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{s.n}</span>
-              <span style={{ textAlign: "right", color: C.textMuted, fontVariantNumeric: "tabular-nums" }}>{s.n ? eur(s.m) : "—"}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 // ─── WeekByWeek ─────────────────────────────────────────────────────────────
 function WeekByWeek({ allRows, today, selected, onSelect }) {
@@ -444,15 +384,12 @@ function DemoTable({ rows, label }) {
     textAlign: "left", padding: "10px 10px", borderBottom: `1px solid ${C.border}`, fontWeight: 600,
     whiteSpace: "nowrap", fontFamily: FONT_MONO,
   };
-  const groups = [["BCN", "Barcelona", "CET"], ["TOR", "Toronto", "ET"]];
-
   return (
     <div style={{ overflowX: "auto", border: `1px solid ${C.border}`, borderRadius: 14, background: C.surface }}>
       <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 760, fontVariantNumeric: "tabular-nums", fontFamily: FONT_SANS }}>
         <thead>
           <tr>
             <th style={thStyle}>Time</th>
-            <th style={thStyle}>SDR</th>
             <th style={thStyle}>Deal</th>
             <th style={thStyle}>Segment</th>
             <th style={{ ...thStyle, textAlign: "right" }}>MRR</th>
@@ -463,47 +400,30 @@ function DemoTable({ rows, label }) {
         </thead>
         <tbody>
           {!rows.length && (
-            <tr><td colSpan={8} style={{ padding: 26, color: C.textMuted, textAlign: "center", borderBottom: "none" }}>No demos for this period.</td></tr>
+            <tr><td colSpan={7} style={{ padding: 26, color: C.textMuted, textAlign: "center", borderBottom: "none" }}>No demos for this period.</td></tr>
           )}
-          {groups.map(([office, oLabel, tz]) => {
-            const rr = rows.filter((r) => r.office === office);
-            if (!rr.length) return null;
-            return [
-              <tr key={`g-${office}`}>
-                <td colSpan={8} style={{
-                  background: C.surfaceAlt, fontWeight: 600, fontSize: 12, letterSpacing: "0.04em",
-                  textTransform: "uppercase", color: C.textMuted, padding: "7px 12px", borderBottom: `1px solid ${C.border}`,
-                }}>
-                  {oLabel} <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0, color: C.textHint, marginLeft: 8 }}>
-                    {rr.length} demos - {eur(sum(rr, (r) => r.amt))} - times in {tz}
-                  </span>
+          {rows.map((r, i) => {
+            const tdBase = { padding: "8px 10px", borderBottom: i === rows.length - 1 ? "none" : `1px solid ${C.border}`, verticalAlign: "middle", whiteSpace: "nowrap", color: r.inPlay ? C.text : C.textMuted };
+            return (
+              <tr key={r.id}>
+                <td style={{ ...tdBase, fontWeight: 600 }}>{r.time}</td>
+                <td style={{ ...tdBase, whiteSpace: "normal", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }}>
+                  {r.url ? <a href={r.url} target="_blank" rel="noopener" style={{ color: r.inPlay ? C.text : C.textMuted, textDecoration: r.inPlay ? "none" : "line-through" }}>{r.name}</a> : r.name}
                 </td>
-              </tr>,
-              ...rr.map((r, i) => {
-                const tdBase = { padding: "8px 10px", borderBottom: i === rr.length - 1 ? "none" : `1px solid ${C.border}`, verticalAlign: "middle", whiteSpace: "nowrap", color: r.inPlay ? C.text : C.textMuted };
-                return (
-                  <tr key={r.id}>
-                    <td style={{ ...tdBase, fontWeight: 600 }}>{r.time}</td>
-                    <td style={tdBase}>{r.sdr}</td>
-                    <td style={{ ...tdBase, whiteSpace: "normal", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {r.url ? <a href={r.url} target="_blank" rel="noopener" style={{ color: r.inPlay ? C.text : C.textMuted, textDecoration: r.inPlay ? "none" : "line-through" }}>{r.name}</a> : r.name}
-                    </td>
-                    <td style={tdBase}><Pill type="seg"><i style={{ width: 8, height: 8, borderRadius: 2, display: "inline-block", background: segColor[r.seg] }} />{SEG_LABEL[r.seg]}</Pill></td>
-                    <td style={{ ...tdBase, textAlign: "right" }}>{r.amt != null ? eur(r.amt) : "—"}</td>
-                    <td style={tdBase}>{r.country || "—"}</td>
-                    <td style={tdBase}>
-                      {r.speedH == null ? <Pill type="fast">n/a</Pill> : r.slow ? <Pill type="slow">Slow - {Math.round(r.speedH)}h</Pill> : <Pill type="fast">Fast - {Math.round(r.speedH)}h</Pill>}
-                    </td>
-                    <td style={tdBase}>
-                      {r.ns === "noshow" && <Pill type="ns">No-show</Pill>}
-                      {r.ns === "rescheduled" && <Pill type="rs">Rescheduled</Pill>}
-                      {r.closed === "lost" && <> <Pill type="lost">Lost</Pill></>}
-                      {r.closed === "won" && <> <Pill type="won">Won</Pill></>}
-                    </td>
-                  </tr>
-                );
-              }),
-            ];
+                <td style={tdBase}><Pill type="seg"><i style={{ width: 8, height: 8, borderRadius: 2, display: "inline-block", background: segColor[r.seg] }} />{SEG_LABEL[r.seg]}</Pill></td>
+                <td style={{ ...tdBase, textAlign: "right" }}>{r.amt != null ? eur(r.amt) : "—"}</td>
+                <td style={tdBase}>{r.country || "—"}</td>
+                <td style={tdBase}>
+                  {r.speedH == null ? <Pill type="fast">n/a</Pill> : r.slow ? <Pill type="slow">Slow - {Math.round(r.speedH)}h</Pill> : <Pill type="fast">Fast - {Math.round(r.speedH)}h</Pill>}
+                </td>
+                <td style={tdBase}>
+                  {r.ns === "noshow" && <Pill type="ns">No-show</Pill>}
+                  {r.ns === "rescheduled" && <Pill type="rs">Rescheduled</Pill>}
+                  {r.closed === "lost" && <> <Pill type="lost">Lost</Pill></>}
+                  {r.closed === "won" && <> <Pill type="won">Won</Pill></>}
+                </td>
+              </tr>
+            );
           })}
         </tbody>
       </table>
@@ -511,7 +431,7 @@ function DemoTable({ rows, label }) {
   );
 }
 
-// ─── FilterBar ──────────────────────────────────────────────────────────────
+// ─── SegButton ─────────────────────────────────────────────────────────────
 function SegButton({ label, value, active, onClick, dotColor }) {
   return (
     <button
@@ -529,72 +449,15 @@ function SegButton({ label, value, active, onClick, dotColor }) {
   );
 }
 
-function FilterBar({ filt, setFilt, roster }) {
-  const OFFICES = { ALL: "Global", BCN: "Barcelona", TOR: "Toronto" };
-  const anyActive = filt.office !== "ALL" || filt.seg !== "ALL" || filt.sdr !== "ALL";
-
-  const sdrOptions = useMemo(() => {
-    const ids = Object.keys(roster).filter((id) => filt.office === "ALL" || roster[id].office === filt.office);
-    ids.sort((a, b) => (roster[a].office + roster[a].name).localeCompare(roster[b].office + roster[b].name));
-    return ids;
-  }, [roster, filt.office]);
-
-  return (
-    <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center", marginBottom: 18 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: C.textHint }}>Office</span>
-        <div style={{ display: "inline-flex", border: `1px solid ${C.border}`, borderRadius: 6, background: C.surface, padding: 2, gap: 2 }}>
-          {Object.entries(OFFICES).map(([v, l]) => (
-            <SegButton key={v} label={l} value={v} active={filt.office === v} onClick={(v) => setFilt({ ...filt, office: v, sdr: "ALL" })} />
-          ))}
-        </div>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: C.textHint }}>Segment</span>
-        <div style={{ display: "inline-flex", border: `1px solid ${C.border}`, borderRadius: 6, background: C.surface, padding: 2, gap: 2 }}>
-          <SegButton label="All" value="ALL" active={filt.seg === "ALL"} onClick={(v) => setFilt({ ...filt, seg: v })} />
-          <SegButton label="Micro" value="micro" active={filt.seg === "micro"} onClick={(v) => setFilt({ ...filt, seg: v })} dotColor={segColor.micro} />
-          <SegButton label="SMB" value="smb" active={filt.seg === "smb"} onClick={(v) => setFilt({ ...filt, seg: v })} dotColor={segColor.smb} />
-          <SegButton label="MM" value="mm" active={filt.seg === "mm"} onClick={(v) => setFilt({ ...filt, seg: v })} dotColor={segColor.mm} />
-        </div>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: C.textHint }}>SDR</span>
-        <select
-          value={filt.sdr}
-          onChange={(e) => setFilt({ ...filt, sdr: e.target.value })}
-          style={{
-            border: `1px solid ${filt.sdr !== "ALL" ? accent : C.border}`, background: C.surface, color: filt.sdr !== "ALL" ? accent : C.text,
-            borderRadius: 6, padding: "6px 30px 6px 10px", fontFamily: FONT_SANS, fontSize: 13, fontWeight: 500,
-            appearance: "none", cursor: "pointer",
-          }}
-        >
-          <option value="ALL">All SDRs</option>
-          {sdrOptions.map((id) => (
-            <option key={id} value={id}>{roster[id].name} - {roster[id].office}</option>
-          ))}
-        </select>
-      </div>
-      {anyActive && (
-        <button onClick={() => setFilt({ office: "ALL", seg: "ALL", sdr: "ALL" })} style={{
-          border: "none", background: "none", color: C.textMuted, fontSize: 12.5,
-          textDecoration: "underline", padding: "4px 2px", cursor: "pointer", fontFamily: FONT_SANS,
-        }}>Reset filters</button>
-      )}
-    </div>
-  );
-}
 
 // ─── Main module ────────────────────────────────────────────────────────────
 export default function DemosModule() {
-  const { todayIso, demos, roster, stats } = DEMOS;
+  const { todayIso, demos } = DEMOS;
   const [selected, setSelected] = useState(todayIso);
-  const [filt, setFilt] = useState({ office: "ALL", seg: "ALL", sdr: "ALL" });
+  const [filt, setFilt] = useState({ seg: "ALL" });
 
   const filtered = useMemo(() => demos.filter((r) =>
-    (filt.office === "ALL" || r.office === filt.office) &&
-    (filt.seg === "ALL" || r.seg === filt.seg) &&
-    (filt.sdr === "ALL" || r.sdrId === filt.sdr),
+    (filt.seg === "ALL" || r.seg === filt.seg),
   ), [demos, filt]);
 
   const scopeRows = useMemo(() => {
@@ -619,12 +482,8 @@ export default function DemosModule() {
 
   const horizonDays = useMemo(() => futureWorkingDays(todayIso, 15), [todayIso]);
 
-  const bcnToday = todayRows.filter((r) => r.office === "BCN");
-  const torToday = todayRows.filter((r) => r.office === "TOR");
   const nsToday = todayRows.filter((r) => r.ns === "noshow");
   const slowToday = todayRows.filter((r) => r.slow && r.inPlay);
-
-  const OFFICE_LABEL = { ALL: "Barcelona & Toronto", BCN: "Barcelona", TOR: "Toronto" };
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT_SANS, padding: "24px 24px 64px" }}>
@@ -633,14 +492,31 @@ export default function DemosModule() {
         <header style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 22 }}>
           <div>
             <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: C.textHint, fontFamily: FONT_MONO }}>
-              Inbound SDR - {filt.sdr !== "ALL" && roster[filt.sdr] ? `${roster[filt.sdr].name} - ` : ""}{OFFICE_LABEL[filt.office]}{filt.seg !== "ALL" ? ` - ${SEG_LABEL[filt.seg]} only` : ""}
+              Santiago Subra{filt.seg !== "ALL" ? ` - ${SEG_LABEL[filt.seg]} only` : ""}
             </div>
-            <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: 26, fontWeight: 600, margin: 0, letterSpacing: -0.2 }}>Demos at Stake</h1>
-            <div style={{ color: C.textHint, marginTop: 4 }}>Demos booked on inbound-SDR deals, and the MRR riding on them.</div>
+            <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: 26, fontWeight: 600, margin: 0, letterSpacing: -0.2 }}>My Demos</h1>
+            <div style={{ color: C.textHint, marginTop: 4 }}>Demos booked on my deals, and the MRR riding on them.</div>
           </div>
         </header>
 
-        <FilterBar filt={filt} setFilt={setFilt} roster={roster} />
+        {/* Segment filter */}
+        <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center", marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: C.textHint }}>Segment</span>
+            <div style={{ display: "inline-flex", border: `1px solid ${C.border}`, borderRadius: 6, background: C.surface, padding: 2, gap: 2 }}>
+              <SegButton label="All" value="ALL" active={filt.seg === "ALL"} onClick={(v) => setFilt({ ...filt, seg: v })} />
+              <SegButton label="Micro" value="micro" active={filt.seg === "micro"} onClick={(v) => setFilt({ ...filt, seg: v })} dotColor={segColor.micro} />
+              <SegButton label="SMB" value="smb" active={filt.seg === "smb"} onClick={(v) => setFilt({ ...filt, seg: v })} dotColor={segColor.smb} />
+              <SegButton label="MM" value="mm" active={filt.seg === "mm"} onClick={(v) => setFilt({ ...filt, seg: v })} dotColor={segColor.mm} />
+            </div>
+          </div>
+          {filt.seg !== "ALL" && (
+            <button onClick={() => setFilt({ ...filt, seg: "ALL" })} style={{
+              border: "none", background: "none", color: C.textMuted, fontSize: 12.5,
+              textDecoration: "underline", padding: "4px 2px", cursor: "pointer", fontFamily: FONT_SANS,
+            }}>Reset</button>
+          )}
+        </div>
 
         {/* Hero grid */}
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr)", gap: 16, marginBottom: 18 }}>
@@ -651,10 +527,7 @@ export default function DemosModule() {
               <KV label="Flagged no-show" value={nsToday.length} warn={nsToday.length > 0} />
               <KV label="Slow-booked >= 48h" value={slowToday.length} warn={slowToday.length > 0} title="Demo booked 48h or more after deal creation - higher no-show risk" />
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
-              <OfficeSplit label="Barcelona" tz="CET" count={bcnToday.length} mrr={sum(bcnToday, (r) => r.amt)} hidden={filt.office === "TOR"} />
-              <OfficeSplit label="Toronto" tz="ET" count={torToday.length} mrr={sum(torToday, (r) => r.amt)} hidden={filt.office === "BCN"} />
-            </div>
+            <div style={{ marginTop: 10 }}><SegmentStack rows={todayRows} /></div>
           </HeroTile>
 
           <SegmentBreakdown rows={scopeRows} label={scopeLabel} />
@@ -694,9 +567,8 @@ export default function DemosModule() {
           </div>
         </section>
 
-        {/* SDR + Weeks */}
-        <section style={{ marginTop: 26, display: "grid", gridTemplateColumns: "minmax(0, 1.4fr) minmax(0, 1fr)", gap: 16 }}>
-          <SdrBreakdown rows={scopeRows} roster={roster} label={scopeLabel} onSdrClick={(id) => setFilt({ ...filt, sdr: id })} activeSdr={filt.sdr} />
+        {/* Weeks */}
+        <section style={{ marginTop: 26, maxWidth: 560 }}>
           <WeekByWeek allRows={filtered} today={todayIso} selected={selected} onSelect={setSelected} />
         </section>
 

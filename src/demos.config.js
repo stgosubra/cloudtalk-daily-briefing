@@ -3,8 +3,6 @@
 // Stage IDs, timezone mapping and constants for the demo tracker.
 // Not generated. Edited by hand when pipelines or roster change.
 
-import { OWNER_IDS } from "./config.js";
-
 // HubSpot deal stage IDs (pipeline-specific)
 export const WON_STAGES = new Set(["6607659", "9474198", "24316488"]);
 export const LOST_STAGES = new Set(["6607660", "9474199", "24316489"]);
@@ -13,16 +11,8 @@ export const LOST_STAGES = new Set(["6607660", "9474199", "24316489"]);
 export const TZ = { BCN: "Europe/Madrid", TOR: "America/Toronto" };
 export const HOME_TZ = "Europe/Madrid";
 
-// Roster keyed by HubSpot owner ID
-export const ROSTER = Object.fromEntries(
-  Object.entries(OWNER_IDS).map(([name, id]) => {
-    const office = [
-      "Jack Griffiths", "Andy Dai", "Antonio Mioc",
-      "Melanie Feng", "Nicolas Lopez",
-    ].includes(name) ? "TOR" : "BCN";
-    return [String(id), { name, office, lead: name === "Nicolas Lopez" }];
-  }),
-);
+// Roster - Santiago Subra only (single-operator scope)
+export const ROSTER = { "87191703": { name: "Santiago Subra", office: "BCN", lead: false } };
 
 // Segment brackets on amount_in_home_currency (EUR MRR)
 export function segOf(amt) {

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, SectionLabel, Page, PageHeader, Stat, StatRow } from "../../design/ui.jsx";
 import { C, R, SHADOW, T, TRACK, FONT_SANS, FONT_MONO, FONT_DISPLAY, OWNER } from "../../lib/tokens.js";
+import { dialUrl, toE164 } from "../../config.js";
 import {
   TODAY_LABEL,
   REFRESHED_AT,
@@ -111,11 +112,41 @@ function meetProvider(url) {
 // Circular monogram action button: futuristic, minimal, ≥36px tap target.
 // Used in ProspectCard's action row to replace rectangular HubSpot/Meet/Notes buttons.
 // `as="a"` for hrefs, plain button otherwise. Optional `count` shows a corner badge.
-const PhoneIcon = ({ size = 15 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+// Solid handset, not an outline. Its neighbours in the action row are bold mono
+// letterforms (`H`, `GM`); a 2px-stroke outline next to them reads as a lighter
+// weight from a different family, and at 15px the hollow centre just looks like
+// a gap in the row. A filled glyph carries the same optical mass as a letter.
+// Sized 17 in a 38 button so the diagonal handset spans the width the caps do -
+// matching the nominal font-size leaves it visibly small.
+const PhoneIcon = ({ size = 17 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
   </svg>
 );
+
+// The call affordance, which has to cope with the fact that CloudTalk Phone 4.5.1
+// declares no CFBundleURLTypes - it claims no URL scheme at all, so no `tel:` link
+// can ever hand off to it. Click-to-call on the desktop goes through CloudTalk's
+// browser extension, which reads phone numbers out of the DOM.
+//
+// So: with a DIAL_SCHEME set, this is a link and the OS decides. With "none", the
+// button copies the E.164 number instead of dying silently - one click, then paste
+// into the dialer. A button that visibly does nothing is worse than no button.
+function DialButton({ phone }) {
+  const href = dialUrl(phone);
+  const [copied, setCopied] = useState(false);
+  if (href) {
+    return <MonogramButton glyph={<PhoneIcon />} color={C.cyan} href={href}
+      ariaLabel="Call prospect" title={`Call ${phone}`} />;
+  }
+  return <MonogramButton glyph={<PhoneIcon />} color={copied ? C.emerald : C.cyan}
+    ariaLabel="Copy number" title={copied ? "Copied" : `Copy ${phone}`}
+    onClick={() => {
+      navigator.clipboard?.writeText(toE164(phone) || phone);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    }} />;
+}
 
 // A circular action button. Normally carries 1-2 letters, but `glyph` swaps in an
 // icon node instead - a phone is a phone in every language, "PH" is a riddle.
@@ -611,7 +642,14 @@ function HSPanel({ p, notes, setNotes }) {
       {p.phone && (
         <div style={{ minWidth: 130 }}>
           <div style={{ fontFamily: FONT_MONO, fontSize: 8, letterSpacing: 0.6, color: C.textHint, textTransform: "uppercase", marginBottom: 4 }}>Phone</div>
-          <a href={`tel:${p.phone}`} style={{ fontFamily: FONT_MONO, fontSize: 11, color: C.blue, textDecoration: "none" }}>{p.phone}</a>
+          {/* Shows the number as HubSpot formats it; dials the E.164 form. The
+              two differ by spaces, and a space is what made the old href a dead
+              link. `select-all`-ish behaviour is kept for the no-scheme case:
+              with DIAL_SCHEME "none" this degrades to plain copyable text for
+              the CloudTalk extension to pick up. */}
+          {dialUrl(p.phone)
+            ? <a href={dialUrl(p.phone)} title={`Call ${p.phone}`} style={{ fontFamily: FONT_MONO, fontSize: 11, color: C.blue, textDecoration: "none" }}>{p.phone}</a>
+            : <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: C.textMid, userSelect: "all" }}>{p.phone}</span>}
         </div>
       )}
       {p.multiAttendee && <span style={{ alignSelf: "center", fontFamily: FONT_MONO, fontSize: 9, background: C.purpleBg, color: C.purple, border: `1px solid ${C.purpleBorder}`, borderRadius: 10, padding: "1px 7px" }}>👥 Multi-attendee</span>}
@@ -733,12 +771,7 @@ function ProspectCard({ m, notes, setNotes, index, qualStatus, setQualStatus }) 
                   href={m.meetLink} ariaLabel={p.label} title={p.label} />
               );
             })()}
-            {m.phone && (
-              <MonogramButton glyph={<PhoneIcon />} color={C.cyan}
-                href={`tel:${m.phone}`}
-                ariaLabel="Call prospect"
-                title={`Call ${m.phone}`} />
-            )}
+            {m.phone && <DialButton phone={m.phone} />}
             <button onClick={() => setExp((e) => !e)}
               style={{ fontFamily: FONT_MONO, fontSize: 9, padding: "3px 10px", borderRadius: 6, border: `1px solid ${C.border}`, background: C.surface, color: C.textMuted, cursor: "pointer", transition: "all 0.12s", letterSpacing: 0.3 }}>
               {exp ? "▲ Less" : "▼ Details"}
@@ -788,24 +821,44 @@ function WeekCard({ m }) {
   );
 }
 
-// ev.emoji arrives as a shortcode name (e.g. "muscle"), not a glyph - the live
-// pull has no reliable way to emit literal unicode emoji in JSON. Map known
-// shortcodes to glyphs here; unknown/already-a-glyph values pass through as-is.
-const EMOJI_SHORTCODES = {
-  muscle: "💪",
-  speech_balloon: "💬",
-  brain: "🧠",
-  headphones: "🎧",
-  broom: "🧹",
-  calendar: "📅",
-  car: "🚗",
-  fork_and_knife: "🍴",
-  house: "🏠",
-  palm_tree: "🌴",
-  pizza: "🍕",
+// `ev.emoji` arrives as a category token - "gym", "team", "focus" - not a glyph.
+// The live pull classifies the event and names the kind; picking the picture is
+// a render decision and belongs here. The previous map was keyed on emoji
+// shortcodes ("muscle", "fork_and_knife") that the pull has never emitted, so
+// every token fell through the `|| code` escape and the card rendered the literal
+// word "gym" next to its own title.
+//
+// One token always maps to one glyph, so an internal team call looks the same on
+// every row of every day - that consistency is the whole point of the column.
+const EVENT_GLYPHS = {
+  gym: "🏋️", lunch: "🍽️", focus: "🎧", ooo: "🌴", commute: "🚗",
+  team: "👥", oneone: "🤝", company: "🏢", product: "🧩", dev: "🛠️",
+  interview: "💼", training: "🎓", admin: "🗂️", social: "☕", personal: "📌",
 };
-function emojiGlyph(code) {
-  return EMOJI_SHORTCODES[code] || code;
+
+// Fallback for a token the pull invents later. Reads the event title rather than
+// giving up to a bare word - a wrong-but-plausible glyph still parses as "this is
+// not a prospect call", which is all this column has to say.
+const NAME_HINTS = [
+  [/\b(gym|workout|training session|run|padel|yoga)\b/i, "🏋️"],
+  [/\b(lunch|breakfast|dinner|coffee coffee)\b/i, "🍽️"],
+  [/\b(focus|deep work|transition|prep|blocked?)\b/i, "🎧"],
+  [/\b(ooo|out of office|holiday|pto|vacation|leave)\b/i, "🌴"],
+  [/\b(commute|travel|flight|train)\b/i, "🚗"],
+  [/\b(1:?1|one[- ]?on[- ]?one|catch[- ]?up)\b/i, "🤝"],
+  [/\b(all[- ]?hands|town ?hall|company|kick[- ]?off)\b/i, "🏢"],
+  [/\b(product|roadmap|release|launch)\b/i, "🧩"],
+  [/\b(interview|hiring|candidate)\b/i, "💼"],
+  [/\b(workshop|enablement|onboarding|academy|course)\b/i, "🎓"],
+  [/\b(huddle|standup|stand[- ]?up|sync|weekly|team|squad)\b/i, "👥"],
+];
+
+function emojiGlyph(code, name = "") {
+  if (EVENT_GLYPHS[code]) return EVENT_GLYPHS[code];
+  // Already a literal glyph (nothing ASCII in it) - trust it and pass through.
+  if (code && !/^[\w-]+$/.test(code)) return code;
+  const hit = NAME_HINTS.find(([re]) => re.test(name));
+  return hit ? hit[1] : "📅";
 }
 
 function OtherCard({ ev, index }) {
@@ -823,7 +876,7 @@ function OtherCard({ ev, index }) {
         <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>{ev.end}</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 16 }}>{emojiGlyph(ev.emoji)}</span>
+        <span style={{ fontSize: 16 }}>{emojiGlyph(ev.emoji, ev.name)}</span>
         <span style={{ fontSize: 14, fontWeight: 500, color: C.text }}>{ev.name}</span>
         {ev.note && <span style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>{ev.note}</span>}
         {ev.meetLink && (() => {

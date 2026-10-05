@@ -49,6 +49,36 @@ export const OWNER = {
 // the links.
 export const OWNER_IDS = {};
 
+// How a phone number becomes a click.
+//
+// The number as HubSpot stores it is for reading - "+34 673 05 02 38" - and a
+// space makes the URI invalid, so the browser drops the click silently. That is
+// not a handler problem, it is a malformed-URL problem, and it looked identical
+// from the outside. `dialUrl` strips to E.164 first, every time.
+//
+// `DIAL_SCHEME` then decides who answers:
+//   "tel"    - hands off to whatever the OS registered. Works only if something
+//              actually claims tel: - the CloudTalk Phone desktop app, FaceTime,
+//              or a softphone. Nothing registered means nothing happens.
+//   "callto" - the older scheme some softphones claim instead of tel:.
+//   "none"   - render the number as plain selectable text and let the CloudTalk
+//              browser extension find it. No link, no dead click.
+export const DIAL_SCHEME = "tel";
+
+export const toE164 = (phone) => {
+  if (!phone) return null;
+  const s = String(phone).trim();
+  const digits = s.replace(/[^\d]/g, "");
+  if (!digits) return null;
+  return s.startsWith("+") ? `+${digits}` : digits;
+};
+
+export const dialUrl = (phone) => {
+  const n = toE164(phone);
+  if (!n || DIAL_SCHEME === "none") return null;
+  return `${DIAL_SCHEME}:${n}`;
+};
+
 export const hsContactUrl = (id) =>
   `https://app.hubspot.com/contacts/${PORTAL_ID}/record/0-1/${id}`;
 // 0-1 contact, 0-2 company, 0-3 deal.

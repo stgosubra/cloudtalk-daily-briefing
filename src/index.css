@@ -26,3 +26,10 @@ textarea::placeholder, input::placeholder {
 ::-webkit-scrollbar-track { background: #0a0c12; }
 ::-webkit-scrollbar-thumb { background: #22262f; border-radius: 0; }
 ::-webkit-scrollbar-thumb:hover { background: #34405c; }
+
+/* Pulse for live-status dots (staleness banner). Inline styles cannot declare
+   keyframes, so the one animation the shell needs lives here. */
+@keyframes ct-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}

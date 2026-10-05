@@ -3,6 +3,7 @@ import { C, R, SHADOW, T, TRACK, FONT_SANS, FONT_MONO, FONT_DISPLAY } from "./li
 import { PROFILE } from "./config.js";
 import { MODULES } from "./lib/modules.js";
 import { CloudTalkBadge } from "./design/brand.jsx";
+import { ModuleIcon } from "./design/icons.jsx";
 import { staleModules, declaredGaps } from "./lib/freshness.js";
 
 import DashboardModule from "./modules/dashboard/index.jsx";
@@ -208,6 +209,14 @@ export default function Shell() {
                 }}>
                   {item.num}
                 </span>
+                {!collapsed && ModuleIcon[item.id] && (
+                  <span style={{
+                    display: "flex", alignItems: "center", flexShrink: 0,
+                    color: isActive ? accent : C.textFaint,
+                  }}>
+                    {ModuleIcon[item.id]}
+                  </span>
+                )}
                 {!collapsed && (
                   <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.25, flex: 1, minWidth: 0 }}>
                     <span style={{ fontSize: T.body, fontWeight: 500 }}>{item.label}</span>
@@ -220,21 +229,26 @@ export default function Shell() {
                   <span
                     title={`${ssAlertCount} self-served onboarding alert${ssAlertCount === 1 ? "" : "s"} - open Self-Served`}
                     style={{
-                      fontFamily: FONT_MONO, fontSize: collapsed ? 11 : 9,
+                      fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700,
                       color: C.amber, lineHeight: 1,
+                      background: C.amberBg,
+                      border: `1px solid ${C.amberBorder}`,
+                      borderRadius: R.sm,
+                      padding: "3px 6px",
                       ...(collapsed
-                        ? { position: "absolute", top: 3, right: 5 }
-                        : { display: "inline-flex", alignItems: "center", gap: 3 }),
+                        ? { position: "absolute", top: 3, right: 3, padding: "2px 4px" }
+                        : {}),
                     }}
                   >
-                    {"\u26A0"}{!collapsed && ssAlertCount > 0 && (
-                      <span style={{ fontWeight: 600 }}>{ssAlertCount}</span>
-                    )}
+                    +{ssAlertCount}
                   </span>
                 )}
-                {!collapsed && !navAlert && isActive && (
+                {isActive && (
                   <span style={{
-                    width: 5, height: 5, borderRadius: "50%", background: accent,
+                    position: "absolute", right: -1,
+                    top: 8, bottom: 8, width: 3,
+                    background: accent, borderRadius: "2px 0 0 2px",
+                    boxShadow: `0 0 8px ${accent}99`,
                   }} />
                 )}
               </button>
@@ -305,6 +319,11 @@ function StalenessBanner() {
       borderBottom: `1px solid ${C.redBorder}`,
       fontSize: T.micro, color: C.textMid,
     }}>
+      <span style={{
+        width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+        background: C.red, boxShadow: `0 0 8px ${C.red}99`,
+        animation: "ct-pulse 2s ease-in-out infinite",
+      }} />
       <span style={{
         fontFamily: FONT_MONO, fontSize: T.label, color: C.red,
         letterSpacing: TRACK.label, flexShrink: 0,

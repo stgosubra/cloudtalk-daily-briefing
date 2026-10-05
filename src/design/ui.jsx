@@ -94,7 +94,7 @@ export function SectionLabel({ children, style }) {
 // ---------------------------------------------------------------------------
 // label / big number / one line of context. `of` renders the denominator inline
 // at a smaller size, which is how "62/90" reads as one figure rather than two.
-export function Stat({ label, value, of, note, noteLevel, size = "hero", right, style }) {
+export function Stat({ label, value, of, note, noteLevel, size = "hero", right, style, valueColor }) {
   const fs = size === "heroLg" ? T.heroLg : size === "sm" ? 24 : T.hero;
   const noteColor = noteLevel ? SEMANTIC[noteLevel].fill : C.textHint;
   return (
@@ -106,7 +106,7 @@ export function Stat({ label, value, of, note, noteLevel, size = "hero", right, 
       <div style={{
         font: `600 ${fs}px/1 ${FONT_SANS}`,
         letterSpacing: TRACK.tighter,
-        color: C.text,
+        color: valueColor || C.text,
         ...NUM,
       }}>
         {/* A bare number counts up; anything pre-formatted (€1,933, "47%", MASK)

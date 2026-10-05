@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { C, FONT_SANS, FONT_MONO, FONT_DISPLAY } from "./lib/palette";
+import { C, R, SHADOW, T, TRACK, FONT_SANS, FONT_MONO, FONT_DISPLAY } from "./lib/tokens.js";
 import { PROFILE } from "./config.js";
 import { MODULES } from "./lib/modules.js";
 import { staleModules, declaredGaps } from "./lib/freshness.js";
@@ -10,7 +10,7 @@ import CalculatorModule from "./modules/calculator/index.jsx";
 import PerformanceModule from "./modules/performance/index.jsx";
 import SelfServedModule from "./modules/selfserved/index.jsx";
 import PacingModule from "./modules/pacing/index.jsx";
-import DemosModule from "./modules/demos/index.jsx";
+import DealsModule from "./modules/deals/index.jsx";
 import { onboardingAlertCount } from "./modules/selfserved/data.js";
 
 // Module metadata comes from lib/modules.js; only the component binding lives
@@ -22,7 +22,7 @@ const COMPONENTS = {
   performance: PerformanceModule,
   selfserved: SelfServedModule,
   pacing: PacingModule,
-  demos: DemosModule,
+  deals: DealsModule,
 };
 
 const NAV = MODULES.map((m) => ({ ...m, component: COMPONENTS[m.id] }));
@@ -93,7 +93,7 @@ export default function Shell() {
 
   return (
     <div style={{
-      display: "flex", minHeight: "100vh", background: C.bg, color: C.text,
+      display: "flex", minHeight: "100vh", background: C.bgGlow, color: C.text,
       fontFamily: FONT_SANS,
     }}>
       {/* LEFT RAIL */}
@@ -111,26 +111,33 @@ export default function Shell() {
       }}>
         {/* Brand */}
         <div style={{
-          padding: collapsed ? "18px 0" : "18px 18px",
-          borderBottom: `1px solid ${C.border}`,
+          padding: collapsed ? "18px 0" : "18px 16px",
           display: "flex",
           alignItems: "center",
           justifyContent: collapsed ? "center" : "space-between",
           gap: 8,
         }}>
           {!collapsed && (
-            <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div style={{
-                fontFamily: FONT_DISPLAY, fontSize: 14, fontWeight: 600,
-                letterSpacing: 0.2, color: C.text,
-              }}>
-                CloudTalk
-              </div>
-              <div style={{
-                fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 1.4,
-                color: C.textHint, marginTop: 2,
-              }}>
-                COCKPIT
+                width: 28, height: 28, borderRadius: R.md, flexShrink: 0,
+                background: `linear-gradient(140deg, ${C.purple}, ${C.blue})`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: FONT_DISPLAY, fontSize: 13, fontWeight: 700, color: "#fff",
+              }}>C</div>
+              <div style={{ lineHeight: 1.25 }}>
+                <div style={{
+                  fontFamily: FONT_DISPLAY, fontSize: T.body, fontWeight: 600,
+                  letterSpacing: TRACK.tight, color: C.text,
+                }}>
+                  CloudTalk
+                </div>
+                <div style={{
+                  fontFamily: FONT_MONO, fontSize: 9, letterSpacing: TRACK.labelWide,
+                  color: C.textFaint,
+                }}>
+                  COCKPIT
+                </div>
               </div>
             </div>
           )}
@@ -138,10 +145,10 @@ export default function Shell() {
             onClick={() => setCollapsed((v) => !v)}
             title={collapsed ? "Expand (Cmd+B)" : "Collapse (Cmd+B)"}
             style={{
-              background: "transparent",
+              background: C.wellBg,
               border: `1px solid ${C.border}`,
               color: C.textMuted,
-              width: 28, height: 28, borderRadius: 6,
+              width: 26, height: 26, borderRadius: R.sm,
               cursor: "pointer",
               fontFamily: FONT_MONO, fontSize: 11,
               display: "flex", alignItems: "center", justifyContent: "center",
@@ -152,13 +159,12 @@ export default function Shell() {
         </div>
 
         {/* Nav */}
-        <nav style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+        <nav style={{ flex: 1, overflowY: "auto", padding: collapsed ? "6px 8px" : "6px 10px" }}>
           {NAV.map((item) => {
             const isActive = item.id === activeId;
             const accent = C[item.accent] || C.blue;
-            const accentBg = C[`${item.accent}Bg`] || C.blueBg;
             // Self-served onboarding/upsell alert: surface a warning on the nav label
-            // so a triggered alert is visible even when module 04 isn't open.
+            // so a triggered alert is visible even when module 05 isn't open.
             const navAlert =
               item.id === "selfserved" && !isActive && ssAlertCount > 0;
             return (
@@ -171,19 +177,23 @@ export default function Shell() {
                   width: "100%",
                   display: "flex",
                   alignItems: "center",
-                  gap: collapsed ? 0 : 12,
-                  padding: collapsed ? "10px 0" : "10px 16px",
+                  gap: collapsed ? 0 : 11,
+                  padding: collapsed ? "9px 0" : "9px 11px",
+                  marginBottom: 2,
                   justifyContent: collapsed ? "center" : "flex-start",
-                  background: isActive ? accentBg : "transparent",
-                  borderTop: "none",
-                  borderRight: "none",
-                  borderBottom: "none",
-                  borderLeft: `3px solid ${isActive ? accent : "transparent"}`,
+                  // The active item is a filled gradient pill, not a border tick.
+                  // It is the single loudest thing in the rail, which is what makes
+                  // "where am I" readable at a glance in a seven-module list.
+                  background: isActive
+                    ? `linear-gradient(135deg, ${accent}2E, ${accent}12)`
+                    : "transparent",
+                  border: `1px solid ${isActive ? `${accent}4D` : "transparent"}`,
+                  borderRadius: R.md,
                   color: isActive ? C.text : C.textMuted,
                   cursor: "pointer",
                   textAlign: "left",
                   fontFamily: FONT_SANS,
-                  transition: "background 80ms ease, color 80ms ease",
+                  transition: "background 110ms ease, color 110ms ease",
                 }}
                 onMouseEnter={(e) => {
                   if (!isActive) e.currentTarget.style.background = C.surfaceAlt;
@@ -193,17 +203,17 @@ export default function Shell() {
                 }}
               >
                 <span style={{
-                  fontFamily: FONT_MONO, fontSize: 10,
-                  color: isActive ? accent : C.textHint,
+                  fontFamily: FONT_MONO, fontSize: T.label,
+                  color: isActive ? accent : C.textFaint,
                   letterSpacing: 0.5,
-                  minWidth: collapsed ? 0 : 18,
+                  minWidth: collapsed ? 0 : 17,
                 }}>
                   {item.num}
                 </span>
                 {!collapsed && (
-                  <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.2, flex: 1, minWidth: 0 }}>
-                    <span style={{ fontSize: 13, fontWeight: 500 }}>{item.label}</span>
-                    <span style={{ fontSize: 10, color: C.textHint, fontFamily: FONT_MONO, letterSpacing: 0.3 }}>
+                  <span style={{ display: "flex", flexDirection: "column", lineHeight: 1.25, flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: T.body, fontWeight: 500 }}>{item.label}</span>
+                    <span style={{ fontSize: 10, color: C.textFaint, fontFamily: FONT_MONO, letterSpacing: 0.3 }}>
                       {item.sub}
                     </span>
                   </span>
@@ -213,9 +223,9 @@ export default function Shell() {
                     title={`${ssAlertCount} self-served onboarding alert${ssAlertCount === 1 ? "" : "s"} - open Self-Served`}
                     style={{
                       fontFamily: FONT_MONO, fontSize: collapsed ? 11 : 9,
-                      color: C.red, lineHeight: 1,
+                      color: C.amber, lineHeight: 1,
                       ...(collapsed
-                        ? { position: "absolute", top: 4, right: 6 }
+                        ? { position: "absolute", top: 3, right: 5 }
                         : { display: "inline-flex", alignItems: "center", gap: 3 }),
                     }}
                   >
@@ -224,10 +234,9 @@ export default function Shell() {
                     )}
                   </span>
                 )}
-                {!collapsed && !navAlert && item.status === "live" && (
+                {!collapsed && !navAlert && isActive && (
                   <span style={{
-                    width: 6, height: 6, borderRadius: "50%",
-                    background: C.emerald, boxShadow: `0 0 6px ${C.emerald}`,
+                    width: 5, height: 5, borderRadius: "50%", background: accent,
                   }} />
                 )}
               </button>
@@ -237,15 +246,18 @@ export default function Shell() {
 
         {/* User footer */}
         <div style={{
-          padding: collapsed ? "14px 0" : "14px 16px",
-          borderTop: `1px solid ${C.border}`,
+          margin: collapsed ? "0 8px 12px" : "0 10px 12px",
+          padding: collapsed ? "10px 0" : "10px 11px",
+          borderRadius: R.md,
+          background: C.wellBg,
+          border: `1px solid ${C.border}`,
           display: "flex", alignItems: "center", gap: 10,
           justifyContent: collapsed ? "center" : "flex-start",
         }}>
           <div style={{
-            width: 30, height: 30, borderRadius: "50%",
-            background: C.blueBg, border: `1px solid ${C.blueBorder}`,
-            color: C.blue, fontFamily: FONT_MONO, fontSize: 11, fontWeight: 600,
+            width: 28, height: 28, borderRadius: R.sm,
+            background: `linear-gradient(140deg, ${C.blue}, ${C.purple})`,
+            color: "#fff", fontFamily: FONT_MONO, fontSize: 10, fontWeight: 700,
             display: "flex", alignItems: "center", justifyContent: "center",
             flexShrink: 0,
           }}>
@@ -254,7 +266,7 @@ export default function Shell() {
           {!collapsed && (
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 12, color: C.text, fontWeight: 500 }}>{PROFILE.name}</div>
-              <div style={{ fontSize: 10, color: C.textHint, fontFamily: FONT_MONO }}>{PROFILE.title}</div>
+              <div style={{ fontSize: 10, color: C.textFaint, fontFamily: FONT_MONO }}>{PROFILE.title}</div>
             </div>
           )}
         </div>
@@ -290,12 +302,15 @@ function StalenessBanner() {
   return (
     <div style={{
       display: "flex", alignItems: "center", gap: 10,
-      padding: "10px 22px",
-      background: "rgba(220, 90, 90, 0.10)",
-      borderBottom: `1px solid rgba(220, 90, 90, 0.30)`,
-      fontSize: 12, color: C.text,
+      padding: "10px 28px",
+      background: C.redBg,
+      borderBottom: `1px solid ${C.redBorder}`,
+      fontSize: T.micro, color: C.textMid,
     }}>
-      <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.red, letterSpacing: 0.6 }}>
+      <span style={{
+        fontFamily: FONT_MONO, fontSize: T.label, color: C.red,
+        letterSpacing: TRACK.label, flexShrink: 0,
+      }}>
         STALE
       </span>
       <span>
@@ -309,29 +324,59 @@ function StalenessBanner() {
 // Gaps a refresh chose to declare instead of inventing a value for. Amber, not
 // red: the data is current, one figure just carries a caveat. Separate banner so a
 // declared caveat is never mistaken for a stale module.
+//
+// Collapsed to one line by default. The full list is four dense sentences of
+// methodology that do not change from day to day, and printing them above every
+// module trained the eye to skip the whole banner strip - including the red one
+// underneath it, which is the one that matters. A caveat you have already read
+// should cost one line until you ask for it again.
 function DataGapsBanner() {
   const gaps = declaredGaps();
+  const [open, setOpen] = useState(false);
   if (gaps.length === 0) return null;
+
+  const mods = [...new Set(gaps.map((g) => g.num))].sort();
 
   return (
     <div style={{
-      display: "flex", alignItems: "flex-start", gap: 10,
-      padding: "10px 22px",
-      background: "rgba(212, 160, 60, 0.09)",
-      borderBottom: `1px solid rgba(212, 160, 60, 0.28)`,
-      fontSize: 12, color: C.text,
+      padding: "9px 28px",
+      background: C.amberBg,
+      borderBottom: `1px solid ${C.amberBorder}`,
+      fontSize: T.micro, color: C.textMid,
     }}>
-      <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.amber, letterSpacing: 0.6, paddingTop: 1 }}>
-        GAPS
-      </span>
-      <span>
-        {gaps.map((g, i) => (
-          <span key={i} style={{ display: "block" }}>
-            <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textMuted }}>{g.num}</span>{" "}
-            {g.text}
-          </span>
-        ))}
-      </span>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{
+          display: "flex", alignItems: "center", gap: 10,
+          background: "none", border: "none", padding: 0,
+          font: `400 ${T.micro}px/1.4 ${FONT_SANS}`, color: C.textMid,
+          cursor: "pointer", textAlign: "left",
+        }}
+      >
+        <span style={{
+          fontFamily: FONT_MONO, fontSize: T.label, color: C.amber,
+          letterSpacing: TRACK.label, flexShrink: 0,
+        }}>
+          GAPS
+        </span>
+        <span>
+          {gaps.length} declared caveat{gaps.length === 1 ? "" : "s"} on{" "}
+          <span style={{ fontFamily: FONT_MONO, color: C.textFaint }}>{mods.join(" ")}</span>
+          {" - "}
+          <span style={{ color: C.textHint }}>{open ? "hide" : "show"}</span>
+        </span>
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 8, paddingLeft: 44, display: "flex", flexDirection: "column", gap: 4 }}>
+          {gaps.map((g, i) => (
+            <span key={i}>
+              <span style={{ fontFamily: FONT_MONO, fontSize: T.label, color: C.textFaint }}>{g.num}</span>{" "}
+              {g.text}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -379,7 +424,7 @@ function CommandPalette({ nav, activeId, onSelect, onClose }) {
       onMouseDown={onClose}
       style={{
         position: "fixed", inset: 0, zIndex: 200,
-        background: "rgba(4,6,12,0.6)", backdropFilter: "blur(3px)",
+        background: "rgba(5,5,8,0.66)", backdropFilter: "blur(4px)",
         display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "12vh",
       }}
     >
@@ -387,8 +432,8 @@ function CommandPalette({ nav, activeId, onSelect, onClose }) {
         onMouseDown={(e) => e.stopPropagation()}
         style={{
           width: "min(560px, 92vw)", background: C.surface,
-          border: `1px solid ${C.borderHover}`, borderRadius: 12,
-          boxShadow: "0 24px 70px rgba(0,0,0,0.6)", overflow: "hidden",
+          border: `1px solid ${C.borderStrong}`, borderRadius: R.xl,
+          boxShadow: SHADOW.pop, overflow: "hidden",
         }}
       >
         <input
@@ -400,12 +445,12 @@ function CommandPalette({ nav, activeId, onSelect, onClose }) {
           style={{
             width: "100%", boxSizing: "border-box", padding: "15px 18px",
             background: "transparent", border: "none", borderBottom: `1px solid ${C.border}`,
-            color: C.text, fontFamily: FONT_SANS, fontSize: 15, outline: "none",
+            color: C.text, fontFamily: FONT_SANS, fontSize: T.bodyLg, outline: "none",
           }}
         />
         <div style={{ maxHeight: 360, overflowY: "auto", padding: "6px 0" }}>
           {results.length === 0 && (
-            <div style={{ padding: "14px 18px", color: C.textHint, fontSize: 13 }}>No match for "{q}"</div>
+            <div style={{ padding: "14px 18px", color: C.textHint, fontSize: T.body }}>No match for "{q}"</div>
           )}
           {results.map((n, i) => {
             const accent = C[n.accent] || C.blue;
@@ -418,23 +463,24 @@ function CommandPalette({ nav, activeId, onSelect, onClose }) {
                 onMouseEnter={() => setIdx(i)}
                 onClick={() => pick(n)}
                 style={{
-                  width: "100%", display: "flex", alignItems: "center", gap: 12,
-                  padding: "10px 18px", textAlign: "left", cursor: "pointer",
-                  background: sel ? C.surfaceAlt : "transparent", border: "none",
-                  borderLeft: `3px solid ${sel ? accent : "transparent"}`,
+                  width: "calc(100% - 12px)", display: "flex", alignItems: "center", gap: 12,
+                  padding: "10px 12px", margin: "0 6px", textAlign: "left", cursor: "pointer",
+                  borderRadius: R.sm,
+                  background: sel ? `linear-gradient(135deg, ${accent}24, ${accent}0D)` : "transparent",
+                  border: `1px solid ${sel ? `${accent}40` : "transparent"}`,
                 }}
               >
-                <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: sel ? accent : C.textHint, minWidth: 20 }}>{isAction ? "▸" : n.num}</span>
+                <span style={{ fontFamily: FONT_MONO, fontSize: T.micro, color: sel ? accent : C.textFaint, minWidth: 20 }}>{isAction ? "▸" : n.num}</span>
                 <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ fontSize: 14, color: C.text, fontWeight: 500 }}>{n.label}</span>
-                  <span style={{ fontSize: 11, color: C.textHint, fontFamily: FONT_MONO, marginLeft: 8 }}>{n.sub}</span>
+                  <span style={{ fontSize: T.body, color: C.text, fontWeight: 500 }}>{n.label}</span>
+                  <span style={{ fontSize: T.micro, color: C.textFaint, fontFamily: FONT_MONO, marginLeft: 8 }}>{n.sub}</span>
                 </span>
-                {isActive && <span style={{ fontSize: 10, fontFamily: FONT_MONO, color: C.emerald }}>current</span>}
+                {isActive && <span style={{ fontSize: T.label, fontFamily: FONT_MONO, color: C.emerald }}>current</span>}
               </button>
             );
           })}
         </div>
-        <div style={{ padding: "8px 18px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 14, fontFamily: FONT_MONO, fontSize: 10, color: C.textHint }}>
+        <div style={{ padding: "8px 18px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 14, fontFamily: FONT_MONO, fontSize: T.label, color: C.textFaint }}>
           <span>↑↓ navigate</span><span>↵ open</span><span>esc close</span><span style={{ marginLeft: "auto" }}>⌘K</span>
         </div>
       </div>

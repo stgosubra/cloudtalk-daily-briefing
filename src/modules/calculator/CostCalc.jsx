@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from "react";
+import { C } from "../../lib/tokens.js";
 
 // Module 03 / PAYG tab
 // Per-minute PAYG rate calculator. No plan, billing type or license pricing.
@@ -102,14 +103,16 @@ const eur     = (n) => new Intl.NumberFormat("en-IE", { style: "currency", curre
 const eurRate = (n) => new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 4 }).format(n);
 
 // ── Palette ───────────────────────────────────────────────────────────────────
-const BG    = "#060810";
-const CARD  = "#11141f";
-const LINE  = "rgba(80,130,255,0.1)";
-const BLUE  = "#4D7CFE";
-const TXT   = "#dde6ff";
-const MUT   = "#7C8190";
-const FAINT = "#565B68";
-const GREEN = "#1fae72";
+// Local aliases onto the shared tokens. The names are kept because ~60 style
+// objects below reference them; only the values moved onto the design system.
+const BG    = "transparent";
+const CARD  = C.surface;
+const LINE  = C.border;
+const BLUE  = C.blue;
+const TXT   = C.text;
+const MUT   = C.textMuted;
+const FAINT = C.textFaint;
+const GREEN = C.emerald;
 
 // ── Pill button ───────────────────────────────────────────────────────────────
 function Pill({ active, onClick, children, disabled, color = BLUE }) {
@@ -325,7 +328,7 @@ export default function CostCalc() {
           </div>
           <button onClick={reset}
             style={{ fontSize: 12, fontWeight: 500, padding: "7px 14px", borderRadius: 9, border: `1px solid ${LINE}`, background: "transparent", color: MUT, cursor: "pointer", flexShrink: 0 }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(80,130,255,0.38)"; e.currentTarget.style.color = "#9DB6FF"; }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.borderHover; e.currentTarget.style.color = C.text; }}
             onMouseLeave={(e) => { e.currentTarget.style.borderColor = LINE; e.currentTarget.style.color = MUT; }}>
             Clear
           </button>

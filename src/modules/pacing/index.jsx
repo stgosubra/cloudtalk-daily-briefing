@@ -1,600 +1,632 @@
+// Module 06 - SDR Pacing.
+//
+// Three tabs at three different altitudes, deliberately. The team tab is a
+// forecast: where the month lands if nothing changes, with no individual named.
+// Naming people on a whole-team view invites ranking them, and a team forecast
+// is not a leaderboard - it answers "does the office make the number", which is
+// a different question from "who is behind". The two office tabs are where
+// individuals live, because that is the altitude at which a name is actionable.
+//
+// The September tab is a frozen snapshot from pacing.config.js, not a pull.
+
 import { useState, useMemo } from "react";
-import { motion } from "framer-motion";
-import { C, FONT_SANS, FONT_MONO, FONT_DISPLAY } from "../../lib/palette.js";
 import { PACING, GENERATED_AT } from "./data.js";
 import { PREVIOUS_MONTH } from "../../pacing.config.js";
-
-// ─── Design tokens (orange family) ──────────────────────────────────────────
-const accent = C.orange;
-const accentBg = C.orangeBg;
-const accentBorder = C.orangeBorder;
-
-const ok    = { bg: "rgba(71,205,137,0.12)", fg: C.emerald, bar: C.emerald };
-const mid   = { bg: "rgba(253,176,34,0.12)", fg: C.amber,   bar: C.amber };
-const low   = { bg: "rgba(249,112,102,0.12)", fg: C.red,     bar: C.red };
+import {
+  Page, PageHeader, Card, SectionLabel, Stat, StatRow, StatusDot,
+  Glyph, DataList, DataRow, TabBar, ProgressBar, Empty,
+} from "../../design/ui.jsx";
+import { C, R, T, TRACK, NUM, SEMANTIC, FONT_SANS, FONT_MONO } from "../../lib/tokens.js";
 
 const eur = (n) => "€" + Math.round(n).toLocaleString("en-US");
+const eurK = (n) =>
+  Math.abs(n) >= 10000 ? "€" + (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : eur(n);
 
-function status(pct) {
-  if (pct == null) return { tier: "na", label: "Not enough days yet", colors: null };
-  if (pct >= 100)  return { tier: "ok",  label: "On pace",          colors: ok };
-  if (pct >= 80)   return { tier: "mid", label: "Slightly behind",  colors: mid };
-  return { tier: "low", label: "Needs attention", colors: low };
+// Pacing index: booked / expected-by-now. 100 means exactly on the line.
+// The bands are the ones the team already reads in the Monday review, so they
+// are not re-derived here - they are restated.
+function levelFor(pct) {
+  if (pct == null) return "idle";
+  if (pct >= 100) return "ok";
+  if (pct >= 80) return "warn";
+  return "risk";
+}
+const VERDICT = { ok: "On pace", warn: "Slightly behind", risk: "Needs attention", idle: "No data" };
+
+// ---------------------------------------------------------------------------
+// Maths
+// ---------------------------------------------------------------------------
+// Every figure below is derived from two numbers the pull provides - the
+// month-to-date actual and the member's own working-day calendar. Nothing is
+// interpolated and nothing is smoothed; a projection here is a flat run-rate
+// extrapolation and is labelled as such on screen.
+function metric(actual, target, cal, deals) {
+  const share = cal.total ? cal.elapsed / cal.total : 0;
+  const expected = target * share;
+  const pct = expected > 0 ? (actual / expected) * 100 : null;
+  const projected = share > 0 ? actual / share : null;
+  const gap = Math.max(0, target - actual);
+  const perDay = cal.left > 0 ? gap / cal.left : 0;
+  const runRate = cal.elapsed > 0 ? actual / cal.elapsed : 0;
+  return {
+    actual, target, deals, expected, pct, projected, gap, perDay, runRate,
+    attain: target > 0 ? (actual / target) * 100 : 0,
+    expectedPct: target > 0 ? (expected / target) * 100 : 0,
+    level: levelFor(pct),
+    daysLeft: cal.left,
+  };
 }
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
-function sumFor(members, actuals) {
-  const f = {
-    sqlMrr: 0, sqoMrr: 0, sqlDeals: 0, sqoDeals: 0, missing: 0,
-    sqlTarget: 0, sqoTarget: 0, sqlExpected: 0, sqoExpected: 0,
-    sqlNeed: 0, sqoNeed: 0,
-  };
+// Aggregate a group. Targets and calendars differ per member (time off, a team
+// lead on half quota), so the group's expected line is the sum of individual
+// expected lines - not the group target times some single office-wide share.
+function aggregate(members, actuals) {
+  let sqlA = 0, sqoA = 0, sqlT = 0, sqoT = 0, sqlE = 0, sqoE = 0;
+  let sqlD = 0, sqoD = 0, sqlNeed = 0, sqoNeed = 0, elapsed = 0, missing = 0;
+
   for (const m of members) {
     const share = m.cal.total ? m.cal.elapsed / m.cal.total : 0;
-    f.sqlTarget += m.sql;
-    f.sqoTarget += m.sqo;
-    f.sqlExpected += m.sql * share;
-    f.sqoExpected += m.sqo * share;
+    sqlT += m.sql; sqoT += m.sqo;
+    sqlE += m.sql * share; sqoE += m.sqo * share;
+    elapsed = Math.max(elapsed, m.cal.elapsed);
+
     const a = actuals[m.id];
     const sa = a ? Number(a.sqlMrr) || 0 : 0;
     const oa = a ? Number(a.sqoMrr) || 0 : 0;
     if (m.cal.left > 0) {
-      f.sqlNeed += Math.max(0, m.sql - sa) / m.cal.left;
-      f.sqoNeed += Math.max(0, m.sqo - oa) / m.cal.left;
+      sqlNeed += Math.max(0, m.sql - sa) / m.cal.left;
+      sqoNeed += Math.max(0, m.sqo - oa) / m.cal.left;
     }
-    if (!a) { f.missing++; continue; }
-    f.sqlMrr += sa;
-    f.sqoMrr += oa;
-    f.sqlDeals += Number(a.sqlDeals) || 0;
-    f.sqoDeals += Number(a.sqoDeals) || 0;
+    if (!a) { missing++; continue; }
+    sqlA += sa; sqoA += oa;
+    sqlD += Number(a.sqlDeals) || 0;
+    sqoD += Number(a.sqoDeals) || 0;
   }
-  f.hasData = f.missing < members.length;
-  return f;
-}
 
-function daysLabel(members) {
-  const lefts = [...new Set(members.map((m) => m.cal.left))];
-  if (lefts.length === 1) return `${lefts[0]} working day${lefts[0] === 1 ? "" : "s"} left`;
-  const bcn = members.find((m) => m.office === "BCN" && !m.off?.length);
-  const tor = members.find((m) => m.office === "TOR" && !m.off?.length);
-  return `${bcn?.cal.left ?? "?"} days left in Barcelona, ${tor?.cal.left ?? "?"} in Toronto`;
-}
+  const left = Math.max(...members.map((m) => m.cal.left), 0);
+  const mk = (actual, target, expected, deals, need) => ({
+    actual, target, expected, deals, perDay: need,
+    pct: expected > 0 ? (actual / expected) * 100 : null,
+    projected: expected > 0 ? (actual / expected) * target : null,
+    gap: Math.max(0, target - actual),
+    runRate: elapsed > 0 ? actual / elapsed : 0,
+    attain: target > 0 ? (actual / target) * 100 : 0,
+    expectedPct: target > 0 ? (expected / target) * 100 : 0,
+    level: levelFor(expected > 0 ? (actual / expected) * 100 : null),
+    daysLeft: left,
+  });
 
-function needText(gap, perDay, dLabel, hasData) {
-  if (hasData && gap <= 0) return "Monthly target already reached.";
-  const lead = hasData ? "Still to book" : "To book this month";
-  return `${lead}: ${eur(gap)} - ${dLabel} - ${eur(perDay)}/day needed`;
+  return {
+    sql: mk(sqlA, sqlT, sqlE, sqlD, sqlNeed),
+    sqo: mk(sqoA, sqoT, sqoE, sqoD, sqoNeed),
+    hasData: missing < members.length,
+    missing,
+    size: members.length,
+    daysLeft: left,
+  };
 }
 
 function fmtDate(iso) {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString("en-GB", {
     weekday: "long", day: "numeric", month: "long",
   });
 }
 
-// ─── ProgressBar ────────────────────────────────────────────────────────────
-function ProgressBar({ actual, target, expected, colors, hasData }) {
-  const fillPct = hasData ? Math.min(100, (actual / target) * 100) : 0;
-  const tickPct = target > 0 ? (expected / target) * 100 : 0;
-  const barColor = colors ? colors.bar : C.textHint;
-
-  return (
-    <div style={{ position: "relative", height: 6, borderRadius: 999, background: C.border }}>
-      <motion.div
-        initial={{ width: 0 }}
-        animate={{ width: `${fillPct.toFixed(1)}%` }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-        style={{
-          position: "absolute", inset: "0 auto 0 0",
-          borderRadius: 999, background: barColor,
-        }}
-      />
-      <div style={{
-        position: "absolute", top: -3, bottom: -3, width: 2,
-        left: `calc(${tickPct.toFixed(2)}% - 1px)`,
-        background: C.textMuted, opacity: 0.55,
-      }} />
-    </div>
-  );
+function initials(name) {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join("").toUpperCase();
 }
 
-// ─── MetricCard (team / office level) ───────────────────────────────────────
-function MetricCard({ title, actual, target, deals, hasData, expected, gap, perDay, dLabel }) {
-  const pct = (!hasData || expected <= 0) ? null : (actual / expected) * 100;
-  const st = status(pct);
+// ---------------------------------------------------------------------------
+// Forecast panel - the team tab's unit
+// ---------------------------------------------------------------------------
+// Reads top-down: where this lands, how far that is from the target, and what
+// per-day rate closes the difference. The bar shows booked-against-target with a
+// tick where "expected today" sits, so being behind is visible as a gap between
+// the fill and the tick rather than as a percentage you have to interpret.
+function Forecast({ title, note, m, hasData }) {
+  const s = SEMANTIC[m.level];
+  const landsShort = m.projected != null && m.projected < m.target;
 
   return (
     <div style={{
-      background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14,
-      padding: "22px 22px 20px", display: "flex", flexDirection: "column", gap: 14,
+      border: `1px solid ${C.border}`,
+      borderRadius: R.lg,
+      background: C.cardBg,
+      padding: "20px 20px 18px",
+      display: "flex", flexDirection: "column", gap: 16,
     }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <span style={{
-          fontSize: 13, fontWeight: 600, letterSpacing: "0.06em",
-          textTransform: "uppercase", color: C.textHint, fontFamily: FONT_MONO,
-        }}>{title}</span>
-        <span style={{ fontSize: 12, color: C.textHint }}>MRR, month to date</span>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <SectionLabel>{title}</SectionLabel>
+        <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <StatusDot level={m.level} />
+          <span style={{ font: `400 ${T.micro}px/1 ${FONT_SANS}`, color: s.fill }}>
+            {hasData ? VERDICT[m.level] : "Not loaded"}
+          </span>
+        </span>
       </div>
 
       <div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          <span style={{
+            font: `600 ${T.hero}px/1 ${FONT_SANS}`,
+            letterSpacing: TRACK.tighter, color: C.text, ...NUM,
+          }}>
+            {hasData && m.projected != null ? eurK(m.projected) : "-"}
+          </span>
+          <span style={{ font: `400 ${T.body}px/1 ${FONT_SANS}`, color: C.textFaint, ...NUM }}>
+            / {eurK(m.target)}
+          </span>
+        </div>
+        <div style={{ font: `400 ${T.micro}px/1.4 ${FONT_SANS}`, color: C.textHint, marginTop: 8 }}>
+          projected month-end at the current run rate
+        </div>
+      </div>
+
+      <div>
+        <ProgressBar
+          pct={hasData ? m.attain : 0}
+          level={m.level}
+          height={5}
+          marker={m.expectedPct}
+        />
         <div style={{
-          fontFamily: FONT_DISPLAY, fontWeight: 600, fontSize: 34,
-          lineHeight: 1, letterSpacing: -0.5, fontVariantNumeric: "tabular-nums",
+          display: "flex", justifyContent: "space-between",
+          font: `400 ${T.micro}px/1 ${FONT_SANS}`, color: C.textHint,
+          marginTop: 9, ...NUM,
         }}>
-          {hasData ? eur(actual) : "—"}
+          <span>{hasData ? eur(m.actual) : "-"} booked{hasData ? ` · ${m.deals} deal${m.deals === 1 ? "" : "s"}` : ""}</span>
+          <span>{eur(m.expected)} expected today</span>
         </div>
-        <div style={{ fontSize: 13, color: C.textHint, marginTop: 6, fontVariantNumeric: "tabular-nums" }}>
-          of {eur(target)} target
-        </div>
-      </div>
-
-      <ProgressBar actual={actual} target={target} expected={expected} colors={st.colors} hasData={hasData} />
-
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: 14, color: C.textMuted, fontVariantNumeric: "tabular-nums" }}>
-          Pacing <strong style={{ color: C.text, fontWeight: 600 }}>
-            {pct == null ? "n/a" : `${Math.round(pct)}%`}
-          </strong>
-        </span>
-        <StatusPill tier={st.tier} label={hasData ? st.label : "Not loaded yet"} />
-      </div>
-
-      <div style={{ fontSize: 12.5, color: C.textHint }}>
-        {hasData
-          ? `${deals} deal${deals === 1 ? "" : "s"} - expected by now ${eur(expected)}`
-          : `Expected by now ${eur(expected)}`}
       </div>
 
       <div style={{
-        fontSize: 12.5, color: C.textMuted,
-        borderTop: `1px dashed ${C.border}`, paddingTop: 10,
+        borderTop: `1px solid ${C.divider}`, paddingTop: 13,
+        display: "flex", flexDirection: "column", gap: 6,
+        font: `400 ${T.micro}px/1.5 ${FONT_SANS}`, color: C.textMuted, ...NUM,
       }}>
-        {needText(hasData ? gap : target, perDay, dLabel, hasData)}
-      </div>
-    </div>
-  );
-}
-
-// ─── StatusPill ─────────────────────────────────────────────────────────────
-function StatusPill({ tier, label, small }) {
-  const map = {
-    ok:  { bg: ok.bg,  color: ok.fg },
-    mid: { bg: mid.bg, color: mid.fg },
-    low: { bg: low.bg, color: low.fg },
-    na:  { bg: C.surfaceAlt, color: C.textHint },
-  };
-  const s = map[tier] || map.na;
-  return (
-    <span style={{
-      fontSize: small ? 11.5 : 12.5, fontWeight: 600,
-      padding: small ? "3px 8px" : "5px 10px",
-      borderRadius: 999, whiteSpace: "nowrap",
-      background: s.bg, color: s.color,
-    }}>
-      {label}
-    </span>
-  );
-}
-
-// ─── Per-SDR table ──────────────────────────────────────────────────────────
-function SdrTable({ members, actuals }) {
-  const thStyle = {
-    textAlign: "left", fontSize: 11.5, fontWeight: 600, letterSpacing: "0.06em",
-    textTransform: "uppercase", color: C.textHint, fontFamily: FONT_MONO,
-    padding: "12px 14px 8px", borderBottom: `1px solid ${C.border}`,
-  };
-  const thMetric = { ...thStyle, borderLeft: `1px solid ${C.border}` };
-
-  return (
-    <div style={{
-      overflowX: "auto", border: `1px solid ${C.border}`,
-      borderRadius: 14, background: C.surface,
-    }}>
-      <table style={{
-        width: "100%", borderCollapse: "collapse", minWidth: 640,
-        fontVariantNumeric: "tabular-nums", fontFamily: FONT_SANS,
-      }}>
-        <thead>
-          <tr>
-            <th style={thStyle}>SDR</th>
-            <th style={thMetric}>SQL created</th>
-            <th style={thMetric}>SQO accepted</th>
-          </tr>
-        </thead>
-        <tbody>
-          {members.map((m, i) => (
-            <SdrRow key={m.id} member={m} actuals={actuals} isLast={i === members.length - 1} />
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function SdrRow({ member, actuals, isLast }) {
-  const a = actuals[member.id];
-  const has = !!a;
-  const sub = [member.note, `${member.cal.total} working days`].filter(Boolean).join(" - ");
-  const tdBase = {
-    padding: "12px 14px", verticalAlign: "middle",
-    borderBottom: isLast ? "none" : `1px solid ${C.border}`,
-  };
-
-  return (
-    <tr>
-      <td style={{ ...tdBase, fontWeight: 500, whiteSpace: "nowrap" }}>
-        {member.name}
-        <div style={{ fontWeight: 400, color: C.textHint, fontSize: 12 }}>{sub}</div>
-      </td>
-      <td style={{ ...tdBase, borderLeft: `1px solid ${C.border}`, width: "38%" }}>
-        <InlineMetric
-          actual={has ? Number(a.sqlMrr) || 0 : 0}
-          target={member.sql}
-          deals={has ? Number(a.sqlDeals) || 0 : 0}
-          hasData={has}
-          cal={member.cal}
-        />
-      </td>
-      <td style={{ ...tdBase, borderLeft: `1px solid ${C.border}`, width: "38%" }}>
-        <InlineMetric
-          actual={has ? Number(a.sqoMrr) || 0 : 0}
-          target={member.sqo}
-          deals={has ? Number(a.sqoDeals) || 0 : 0}
-          hasData={has}
-          cal={member.cal}
-        />
-      </td>
-    </tr>
-  );
-}
-
-function InlineMetric({ actual, target, deals, hasData, cal }) {
-  const share = cal.total ? cal.elapsed / cal.total : 0;
-  const expected = target * share;
-  const pct = (!hasData || expected <= 0) ? null : (actual / expected) * 100;
-  const st = status(pct);
-  const gap = target - actual;
-  const perDay = cal.left > 0 ? Math.max(0, gap) / cal.left : 0;
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", fontSize: 13.5 }}>
-        <span style={{ fontWeight: 600, color: C.text }}>{hasData ? eur(actual) : "—"}</span>
-        <span style={{ color: C.textHint, fontSize: 12 }}>
-          of {eur(target)}{hasData ? ` - ${deals} deal${deals === 1 ? "" : "s"}` : ""}
-        </span>
-      </div>
-      <ProgressBar actual={actual} target={target} expected={expected} colors={st.colors} hasData={hasData} />
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5, color: C.textMuted }}>
-        <span>
-          Pacing <strong style={{ color: C.text, fontWeight: 600 }}>
-            {pct == null ? "n/a" : `${Math.round(pct)}%`}
-          </strong>
-        </span>
-        <StatusPill tier={st.tier} label={hasData ? st.label : "Not loaded yet"} small />
-      </div>
-      <div style={{ fontSize: 12, color: C.textHint }}>
-        {needText(
-          hasData ? gap : target,
-          hasData ? perDay : (cal.left > 0 ? target / cal.left : 0),
-          `${cal.left} day${cal.left === 1 ? "" : "s"} left`,
-          hasData,
+        {m.gap <= 0 && hasData ? (
+          <span style={{ color: SEMANTIC.ok.fill }}>Target already reached.</span>
+        ) : (
+          <>
+            <span>
+              <strong style={{ color: C.text, fontWeight: 500 }}>{eur(m.gap)}</strong> still to book
+              {" · "}{m.daysLeft} day{m.daysLeft === 1 ? "" : "s"} left
+            </span>
+            <span>
+              Needs <strong style={{ color: C.text, fontWeight: 500 }}>{eur(m.perDay)}</strong>/day
+              {hasData && m.runRate > 0 && (
+                <> · currently running {eur(m.runRate)}/day</>
+              )}
+            </span>
+          </>
         )}
+        {note && <span style={{ color: C.textHint }}>{note}</span>}
       </div>
-    </div>
-  );
-}
 
-// ─── OfficeSection ──────────────────────────────────────────────────────────
-function OfficeSection({ label, sub, members, actuals }) {
-  const fig = sumFor(members, actuals);
-  const dl = daysLabel(members);
-
-  return (
-    <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-        <h2 style={{
-          fontFamily: FONT_DISPLAY, fontWeight: 600, fontSize: 20,
-          margin: 0, letterSpacing: -0.2,
-        }}>{label}</h2>
-        <span style={{ fontSize: 13, color: C.textHint }}>{sub}</span>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <MetricCard
-          title="SQL created" actual={fig.sqlMrr} target={fig.sqlTarget}
-          deals={fig.sqlDeals} hasData={fig.hasData} expected={fig.sqlExpected}
-          gap={fig.sqlTarget - fig.sqlMrr} perDay={fig.sqlNeed} dLabel={dl}
-        />
-        <MetricCard
-          title="SQO accepted" actual={fig.sqoMrr} target={fig.sqoTarget}
-          deals={fig.sqoDeals} hasData={fig.hasData} expected={fig.sqoExpected}
-          gap={fig.sqoTarget - fig.sqoMrr} perDay={fig.sqoNeed} dLabel={dl}
-        />
-      </div>
-      <SdrTable members={members} actuals={actuals} />
-    </section>
-  );
-}
-
-// ─── September (frozen) ─────────────────────────────────────────────────────
-function SeptemberView() {
-  const prev = PREVIOUS_MONTH;
-  if (!prev) return null;
-
-  const groups = [
-    { label: "Whole team", data: prev.team },
-    { label: "Barcelona", data: prev.BCN },
-    { label: "Toronto",   data: prev.TOR },
-  ];
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-      <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-          <h2 style={{ fontFamily: FONT_DISPLAY, fontWeight: 600, fontSize: 20, margin: 0 }}>
-            {prev.label}, final
-          </h2>
-          <span style={{
-            fontSize: 11, fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase",
-            color: C.textHint, background: C.surfaceAlt, border: `1px solid ${C.border}`,
-            borderRadius: 999, padding: "3px 9px",
-          }}>Closed</span>
+      {hasData && landsShort && (
+        <div style={{ font: `400 ${T.micro}px/1.4 ${FONT_SANS}`, color: s.fill }}>
+          Lands {eur(m.target - m.projected)} short unless the rate changes.
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-          {groups.map(({ label, data }) => {
-            const sp = Math.round((data.sqlMrr / data.sqlTarget) * 100);
-            const op = Math.round((data.sqoMrr / data.sqoTarget) * 100);
-            const st = status(sp);
-            return (
-              <div key={label} style={{
-                background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14,
-                padding: "16px 18px 14px", display: "flex", flexDirection: "column", gap: 10,
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <span style={{
-                    fontSize: 13, fontWeight: 600, letterSpacing: "0.06em",
-                    textTransform: "uppercase", color: C.textHint, fontFamily: FONT_MONO,
-                  }}>{label}</span>
-                  <span style={{ fontSize: 12, color: C.textHint }}>final</span>
-                </div>
-                <div>
-                  <div style={{
-                    fontFamily: FONT_DISPLAY, fontWeight: 600, fontSize: 24,
-                    lineHeight: 1, fontVariantNumeric: "tabular-nums",
-                  }}>{sp}%</div>
-                  <div style={{ fontSize: 13, color: C.textHint, marginTop: 4 }}>
-                    SQL - {eur(data.sqlMrr)} of {eur(data.sqlTarget)}
-                  </div>
-                </div>
-                <ProgressBar actual={data.sqlMrr} target={data.sqlTarget} expected={data.sqlTarget} colors={st.colors} hasData />
-                <div style={{ fontSize: 12.5, color: C.textHint }}>
-                  <strong style={{ color: C.text, fontWeight: 600 }}>{op}%</strong> SQO - {eur(data.sqoMrr)} of {eur(data.sqoTarget)}
-                </div>
-                <div style={{ fontSize: 12.5, color: C.textHint }}>
-                  {data.sqlDeals} SQLs created - {data.sqoDeals} SQOs accepted
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {prev.people && (
-        <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 12 }}>
-            <h2 style={{ fontFamily: FONT_DISPLAY, fontWeight: 600, fontSize: 20, margin: 0 }}>
-              SDRs
-            </h2>
-            <span style={{ fontSize: 13, color: C.textHint }}>where the month finished</span>
-          </div>
-          <PrevTable people={prev.people} />
-        </section>
       )}
     </div>
   );
 }
 
-function PrevTable({ people }) {
-  const thStyle = {
-    textAlign: "left", fontSize: 11.5, fontWeight: 600, letterSpacing: "0.06em",
-    textTransform: "uppercase", color: C.textHint, fontFamily: FONT_MONO,
-    padding: "12px 14px 8px", borderBottom: `1px solid ${C.border}`,
-  };
+// ---------------------------------------------------------------------------
+// Team tab - forecast only, no names
+// ---------------------------------------------------------------------------
+function TeamTab({ roster, actuals, bcn, tor }) {
+  const all = useMemo(() => aggregate(roster, actuals), [roster, actuals]);
+  const bcnAgg = useMemo(() => aggregate(bcn, actuals), [bcn, actuals]);
+  const torAgg = useMemo(() => aggregate(tor, actuals), [tor, actuals]);
+
+  const groups = [
+    { key: "BCN", label: "Barcelona", region: "EMEA", agg: bcnAgg },
+    { key: "TOR", label: "Toronto", region: "NA", agg: torAgg },
+  ];
 
   return (
-    <div style={{
-      overflowX: "auto", border: `1px solid ${C.border}`,
-      borderRadius: 14, background: C.surface,
-    }}>
-      <table style={{
-        width: "100%", borderCollapse: "collapse", minWidth: 640,
-        fontVariantNumeric: "tabular-nums", fontFamily: FONT_SANS,
-      }}>
-        <thead>
-          <tr>
-            <th style={thStyle}>SDR</th>
-            <th style={{ ...thStyle, borderLeft: `1px solid ${C.border}` }}>SQL created</th>
-            <th style={{ ...thStyle, borderLeft: `1px solid ${C.border}` }}>SQO accepted</th>
-          </tr>
-        </thead>
-        <tbody>
-          {people.map(([office, name, sa, st, oa, ot], i) => {
-            const sp = Math.round((sa / st) * 100);
-            const op = Math.round((oa / ot) * 100);
-            const stSql = status(sp);
-            const stSqo = status(op);
-            const isLast = i === people.length - 1;
-            const tdBase = {
-              padding: "12px 14px", verticalAlign: "middle",
-              borderBottom: isLast ? "none" : `1px solid ${C.border}`,
-            };
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <Forecast title="SQL created" m={all.sql} hasData={all.hasData} />
+        <Forecast title="SQO accepted" m={all.sqo} hasData={all.hasData} />
+      </div>
+
+      <Card title="Office split" right={<SectionLabel>{all.size} SDRs</SectionLabel>}>
+        <DataList>
+          {groups.map((g, i) => {
+            const a = g.agg;
             return (
-              <tr key={name}>
-                <td style={{ ...tdBase, fontWeight: 500, whiteSpace: "nowrap" }}>
-                  {name}
-                  <div style={{ fontWeight: 400, color: C.textHint, fontSize: 12 }}>
-                    {office === "BCN" ? "Barcelona" : "Toronto"}
+              <DataRow key={g.key} last={i === groups.length - 1}>
+                <Glyph level={a.sqo.level} size={32}>{g.key}</Glyph>
+                <div style={{ minWidth: 150 }}>
+                  <div style={{ font: `500 ${T.body}px/1.2 ${FONT_SANS}`, color: C.text }}>
+                    {g.label}
                   </div>
-                </td>
-                <td style={{ ...tdBase, borderLeft: `1px solid ${C.border}`, width: "38%" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5 }}>
-                      <span style={{ fontWeight: 600 }}>{eur(sa)}</span>
-                      <span style={{ color: C.textHint, fontSize: 12 }}>of {eur(st)}</span>
-                    </div>
-                    <ProgressBar actual={sa} target={st} expected={st} colors={stSql.colors} hasData />
-                    <div style={{ fontSize: 12.5, color: C.textMuted }}>
-                      Finished at <strong style={{ color: C.text }}>{sp}%</strong>
-                    </div>
+                  <div style={{ font: `400 ${T.micro}px/1.3 ${FONT_SANS}`, color: C.textHint, marginTop: 3 }}>
+                    {g.region} · {a.size} SDRs · {a.daysLeft} days left
                   </div>
-                </td>
-                <td style={{ ...tdBase, borderLeft: `1px solid ${C.border}`, width: "38%" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13.5 }}>
-                      <span style={{ fontWeight: 600 }}>{eur(oa)}</span>
-                      <span style={{ color: C.textHint, fontSize: 12 }}>of {eur(ot)}</span>
-                    </div>
-                    <ProgressBar actual={oa} target={ot} expected={ot} colors={stSqo.colors} hasData />
-                    <div style={{ fontSize: 12.5, color: C.textMuted }}>
-                      Finished at <strong style={{ color: C.text }}>{op}%</strong>
-                    </div>
+                </div>
+
+                <MiniMetric label="SQL" m={a.sql} />
+                <MiniMetric label="SQO" m={a.sqo} />
+
+                <div style={{ marginLeft: "auto", textAlign: "right" }}>
+                  <div style={{
+                    font: `600 ${T.bodyLg}px/1 ${FONT_SANS}`,
+                    color: SEMANTIC[a.sqo.level].fill, ...NUM,
+                  }}>
+                    {a.sqo.pct == null ? "-" : `${Math.round(a.sqo.pct)}%`}
                   </div>
-                </td>
-              </tr>
+                  <div style={{ font: `400 ${T.label}px/1 ${FONT_SANS}`, color: C.textFaint, marginTop: 5, letterSpacing: TRACK.label, textTransform: "uppercase" }}>
+                    SQO pace
+                  </div>
+                </div>
+              </DataRow>
             );
           })}
-        </tbody>
-      </table>
+        </DataList>
+      </Card>
+
+      <div style={{
+        font: `400 ${T.micro}px/1.6 ${FONT_SANS}`, color: C.textHint, maxWidth: "70ch",
+      }}>
+        This tab is the forecast only - no individual is named on it. A team number
+        answers whether the office makes the month; who is behind is a conversation
+        that belongs on the office tab, next to that person's own calendar and time off.
+      </div>
     </div>
   );
 }
 
-// ─── Main module ────────────────────────────────────────────────────────────
-export default function PacingModule() {
-  const [tab, setTab] = useState("current");
+function MiniMetric({ label, m }) {
+  return (
+    <div style={{ width: 148, flex: "none" }}>
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "baseline",
+        font: `400 ${T.micro}px/1 ${FONT_SANS}`, marginBottom: 7, ...NUM,
+      }}>
+        <span style={{ color: C.textHint }}>{label}</span>
+        <span style={{ color: C.textMid }}>{eurK(m.actual)} / {eurK(m.target)}</span>
+      </div>
+      <ProgressBar pct={m.attain} level={m.level} marker={m.expectedPct} />
+    </div>
+  );
+}
 
-  const { roster, actuals, offices, pool, todayIso, monthLabel } = PACING;
-  const bcnMembers = useMemo(() => roster.filter((r) => r.office === "BCN"), [roster]);
-  const torMembers = useMemo(() => roster.filter((r) => r.office === "TOR"), [roster]);
+// ---------------------------------------------------------------------------
+// Office tab - per-SDR, with momentum
+// ---------------------------------------------------------------------------
+const SDR_COLS = "minmax(170px, 1.3fr) 1fr 1fr 96px";
 
-  const bcnCal = bcnMembers.find((m) => !m.off?.length)?.cal;
-  const torCal = torMembers.find((m) => !m.off?.length)?.cal;
+function OfficeTab({ label, region, members, actuals, workingDays }) {
+  const agg = useMemo(() => aggregate(members, actuals), [members, actuals]);
+
+  // Sorted by SQO pace ascending - the person who needs the conversation is at
+  // the top, which is the only ordering that makes a list like this useful.
+  const rows = useMemo(() => {
+    return members
+      .map((m) => {
+        const a = actuals[m.id];
+        const has = !!a;
+        const sql = metric(has ? Number(a.sqlMrr) || 0 : 0, m.sql, m.cal, has ? Number(a.sqlDeals) || 0 : 0);
+        const sqo = metric(has ? Number(a.sqoMrr) || 0 : 0, m.sqo, m.cal, has ? Number(a.sqoDeals) || 0 : 0);
+        return { m, has, sql, sqo };
+      })
+      .sort((a, b) => (a.sqo.pct ?? 1e9) - (b.sqo.pct ?? 1e9));
+  }, [members, actuals]);
 
   return (
-    <div style={{
-      minHeight: "100vh", background: C.bg, color: C.text, fontFamily: FONT_SANS,
-      padding: "36px 36px 64px",
-    }}>
-      <div style={{ maxWidth: 920, margin: "0 auto", display: "flex", flexDirection: "column", gap: 28 }}>
-        {/* Header */}
-        <header style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          <div style={{
-            fontSize: 12, fontWeight: 600, letterSpacing: "0.08em",
-            textTransform: "uppercase", color: accent, fontFamily: FONT_MONO,
-          }}>
-            Inbound SDR - CloudTalk
-          </div>
-          <h1 style={{
-            fontFamily: FONT_DISPLAY, fontWeight: 600, fontSize: 30,
-            lineHeight: 1.15, margin: 0, letterSpacing: -0.2,
-          }}>
-            {tab === "current" ? `${monthLabel} SDR Pacing` : `${PREVIOUS_MONTH?.label} SDR Pacing`}
-          </h1>
-          {tab === "current" ? (
-            <div style={{
-              color: C.textHint, fontSize: 14, display: "flex", flexWrap: "wrap",
-              gap: "6px 14px", fontVariantNumeric: "tabular-nums",
-            }}>
-              <span>Today <strong style={{ color: C.textMuted, fontWeight: 500 }}>{fmtDate(todayIso)}</strong></span>
-              <span>Barcelona <strong style={{ color: C.textMuted, fontWeight: 500 }}>
-                {bcnCal ? `${bcnCal.elapsed} of ${bcnCal.total}` : "—"}
-              </strong> - Toronto <strong style={{ color: C.textMuted, fontWeight: 500 }}>
-                {torCal ? `${torCal.elapsed} of ${torCal.total}` : "—"}
-              </strong> working days completed</span>
-            </div>
-          ) : (
-            <div style={{ color: C.textHint, fontSize: 14 }}>
-              Month closed - {PREVIOUS_MONTH?.sdrCount} SDRs
-              {PREVIOUS_MONTH?.note ? `, ${PREVIOUS_MONTH.note}` : ""}
-            </div>
-          )}
-        </header>
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <StatRow>
+        <Stat
+          size="sm" label="SQL booked" value={eurK(agg.sql.actual)} of={eurK(agg.sql.target)}
+          note={`${agg.sql.pct == null ? "-" : Math.round(agg.sql.pct) + "% of pace"}`}
+          noteLevel={agg.sql.level}
+        />
+        <Stat
+          size="sm" label="SQO accepted" value={eurK(agg.sqo.actual)} of={eurK(agg.sqo.target)}
+          note={`${agg.sqo.pct == null ? "-" : Math.round(agg.sqo.pct) + "% of pace"}`}
+          noteLevel={agg.sqo.level}
+        />
+        <Stat
+          size="sm" label="Still to book" value={eurK(agg.sqo.gap)}
+          note={`${eur(agg.sqo.perDay)}/day across the team`}
+        />
+        <Stat
+          size="sm" label="Days left" value={agg.daysLeft} of={workingDays}
+          note={`${region} · ${agg.size} SDRs`}
+        />
+      </StatRow>
 
-        {/* Tabs */}
+      <Card title={`${label} SDRs`} right={<SectionLabel>sorted by SQO pace</SectionLabel>}>
         <div style={{
-          display: "inline-flex", gap: 4, padding: 4,
-          background: C.surfaceAlt, border: `1px solid ${C.border}`,
-          borderRadius: 999, alignSelf: "flex-start",
+          display: "grid", gridTemplateColumns: SDR_COLS, gap: 12,
+          padding: "0 8px 10px", margin: "0 -8px",
+          borderBottom: `1px solid ${C.border}`,
         }}>
-          {[
-            { key: "current", label: monthLabel || "Current" },
-            { key: "previous", label: PREVIOUS_MONTH?.label || "Previous" },
-          ].map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
-              style={{
-                fontFamily: FONT_SANS, fontSize: 13.5, fontWeight: tab === t.key ? 600 : 500,
-                color: tab === t.key ? C.text : C.textMuted,
-                background: tab === t.key ? C.surface : "transparent",
-                border: "none", borderRadius: 999, padding: "7px 16px", cursor: "pointer",
-                boxShadow: tab === t.key ? "0 1px 2px rgba(0,0,0,0.2)" : "none",
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
+          <SectionLabel>SDR</SectionLabel>
+          <SectionLabel>SQL created</SectionLabel>
+          <SectionLabel>SQO accepted</SectionLabel>
+          <SectionLabel style={{ textAlign: "right" }}>Pace</SectionLabel>
         </div>
 
-        {/* Content */}
-        {tab === "current" ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
-            {/* Team */}
-            <OfficeSection
-              label="Whole team"
-              sub={`${roster.length} SDRs - Barcelona ${bcnMembers.length} + Toronto ${torMembers.length}`}
-              members={roster}
-              actuals={actuals}
-            />
-            {/* Barcelona */}
-            <OfficeSection
-              label="Barcelona"
-              sub={`EMEA - ${bcnMembers.length} SDRs - ${offices?.BCN?.workingDays || "?"} working days`}
-              members={bcnMembers}
-              actuals={actuals}
-            />
-            {/* Toronto */}
-            <OfficeSection
-              label="Toronto"
-              sub={`NA - ${torMembers.length} SDRs - ${offices?.TOR?.workingDays || "?"} working days`}
-              members={torMembers}
-              actuals={actuals}
-            />
-          </div>
+        {rows.length === 0 ? (
+          <Empty level="idle">No SDRs assigned to this office this month.</Empty>
         ) : (
-          <SeptemberView />
+          rows.map((r, i) => (
+            <SdrRow key={r.m.id} row={r} last={i === rows.length - 1} />
+          ))
         )}
+      </Card>
+    </div>
+  );
+}
 
-        {/* Footer */}
-        <footer style={{
-          borderTop: `1px solid ${C.border}`, paddingTop: 18,
-          display: "flex", flexDirection: "column", gap: 8,
-          fontSize: 13, color: C.textHint, maxWidth: "62ch",
+function SdrRow({ row, last }) {
+  const { m, has, sql, sqo } = row;
+  const sub = [m.note, `${m.cal.total} working days`].filter(Boolean).join(" · ");
+
+  return (
+    <DataRow last={last} style={{ display: "grid", gridTemplateColumns: SDR_COLS, alignItems: "center", padding: "14px 8px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
+        <Glyph level={sqo.level} size={30}>{initials(m.name)}</Glyph>
+        <div style={{ minWidth: 0 }}>
+          <div style={{
+            font: `500 ${T.body}px/1.2 ${FONT_SANS}`, color: C.text,
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          }}>
+            {m.name}
+          </div>
+          <div style={{ font: `400 ${T.label}px/1.3 ${FONT_SANS}`, color: C.textFaint, marginTop: 3 }}>
+            {sub}
+          </div>
+        </div>
+      </div>
+
+      <CellMetric m={sql} has={has} />
+      <CellMetric m={sqo} has={has} />
+
+      <div style={{ textAlign: "right" }}>
+        <div style={{
+          font: `600 ${T.bodyLg}px/1 ${FONT_SANS}`,
+          color: has ? SEMANTIC[sqo.level].fill : C.textFaint, ...NUM,
         }}>
-          <p style={{ margin: 0 }}>
-            Target = each SDR's daily rate x their own working days this month.
-            Pacing compares what's been booked to what's expected after the working days completed so far;
-            the marker on each bar is where "expected today" sits. Today counts as a day still to be worked.
-          </p>
-          <p style={{ margin: 0 }}>
-            <StatusPill tier="ok" label="On pace" small />{" "}100% or more of expected{" - "}
-            <StatusPill tier="mid" label="Slightly behind" small />{" "}80-99%{" - "}
-            <StatusPill tier="low" label="Needs attention" small />{" "}below 80%.
-          </p>
-        </footer>
+          {has && sqo.pct != null ? `${Math.round(sqo.pct)}%` : "-"}
+        </div>
+        <div style={{ font: `400 ${T.label}px/1.3 ${FONT_SANS}`, color: C.textFaint, marginTop: 5, ...NUM }}>
+          {has && sqo.gap > 0 ? `${eur(sqo.perDay)}/day` : has ? "done" : "no data"}
+        </div>
+      </div>
+    </DataRow>
+  );
+}
+
+function CellMetric({ m, has }) {
+  const delta = m.actual - m.expected;
+  return (
+    <div style={{ paddingRight: 16 }}>
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "baseline",
+        font: `400 ${T.micro}px/1 ${FONT_SANS}`, marginBottom: 7, ...NUM,
+      }}>
+        <span style={{ color: C.text, fontWeight: 500 }}>{has ? eur(m.actual) : "-"}</span>
+        <span style={{ color: C.textFaint }}>of {eur(m.target)}</span>
+      </div>
+      <ProgressBar pct={has ? m.attain : 0} level={m.level} marker={m.expectedPct} />
+      <div style={{
+        font: `400 ${T.label}px/1 ${FONT_SANS}`, color: C.textHint,
+        marginTop: 7, ...NUM,
+      }}>
+        {has
+          ? `${delta >= 0 ? "+" : "-"}${eur(Math.abs(delta))} vs expected · ${m.deals} deal${m.deals === 1 ? "" : "s"}`
+          : "not loaded"}
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Previous month - frozen snapshot, final numbers only
+// ---------------------------------------------------------------------------
+function PreviousTab() {
+  const prev = PREVIOUS_MONTH;
+  if (!prev) return <Empty level="idle">No previous month on file.</Empty>;
+
+  const groups = [
+    { label: "Whole team", data: prev.team },
+    { label: "Barcelona", data: prev.BCN },
+    { label: "Toronto", data: prev.TOR },
+  ];
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      <StatRow cols={3}>
+        {groups.map(({ label, data }) => {
+          const sp = Math.round((data.sqlMrr / data.sqlTarget) * 100);
+          const op = Math.round((data.sqoMrr / data.sqoTarget) * 100);
+          return (
+            <Stat
+              key={label}
+              size="sm"
+              label={label}
+              value={`${op}%`}
+              note={`SQO ${eurK(data.sqoMrr)} of ${eurK(data.sqoTarget)} · SQL finished ${sp}%`}
+              noteLevel={levelFor(op)}
+            />
+          );
+        })}
+      </StatRow>
+
+      {prev.people && (
+        <Card title="Where the month finished" right={<SectionLabel>{prev.people.length} SDRs</SectionLabel>}>
+          <div style={{
+            display: "grid", gridTemplateColumns: SDR_COLS, gap: 12,
+            padding: "0 8px 10px", margin: "0 -8px",
+            borderBottom: `1px solid ${C.border}`,
+          }}>
+            <SectionLabel>SDR</SectionLabel>
+            <SectionLabel>SQL created</SectionLabel>
+            <SectionLabel>SQO accepted</SectionLabel>
+            <SectionLabel style={{ textAlign: "right" }}>Final</SectionLabel>
+          </div>
+
+          {prev.people
+            .map(([office, name, sa, st, oa, ot]) => ({
+              office, name, sa, st, oa, ot,
+              sp: Math.round((sa / st) * 100),
+              op: Math.round((oa / ot) * 100),
+            }))
+            .sort((a, b) => a.op - b.op)
+            .map((p, i, arr) => (
+              <DataRow
+                key={p.name}
+                last={i === arr.length - 1}
+                style={{ display: "grid", gridTemplateColumns: SDR_COLS, alignItems: "center", padding: "14px 8px" }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
+                  <Glyph level={levelFor(p.op)} size={30}>{initials(p.name)}</Glyph>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ font: `500 ${T.body}px/1.2 ${FONT_SANS}`, color: C.text }}>{p.name}</div>
+                    <div style={{ font: `400 ${T.label}px/1.3 ${FONT_SANS}`, color: C.textFaint, marginTop: 3 }}>
+                      {p.office === "BCN" ? "Barcelona" : "Toronto"}
+                    </div>
+                  </div>
+                </div>
+
+                <FinalCell actual={p.sa} target={p.st} pct={p.sp} />
+                <FinalCell actual={p.oa} target={p.ot} pct={p.op} />
+
+                <div style={{
+                  textAlign: "right", font: `600 ${T.bodyLg}px/1 ${FONT_SANS}`,
+                  color: SEMANTIC[levelFor(p.op)].fill, ...NUM,
+                }}>
+                  {p.op}%
+                </div>
+              </DataRow>
+            ))}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function FinalCell({ actual, target, pct }) {
+  return (
+    <div style={{ paddingRight: 16 }}>
+      <div style={{
+        display: "flex", justifyContent: "space-between", alignItems: "baseline",
+        font: `400 ${T.micro}px/1 ${FONT_SANS}`, marginBottom: 7, ...NUM,
+      }}>
+        <span style={{ color: C.text, fontWeight: 500 }}>{eur(actual)}</span>
+        <span style={{ color: C.textFaint }}>of {eur(target)}</span>
+      </div>
+      <ProgressBar pct={pct} level={levelFor(pct)} />
+      <div style={{ font: `400 ${T.label}px/1 ${FONT_SANS}`, color: C.textHint, marginTop: 7, ...NUM }}>
+        finished at {pct}%
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+export default function PacingModule() {
+  const [period, setPeriod] = useState("current");
+  const [tab, setTab] = useState("team");
+
+  const { roster, actuals, offices, todayIso, monthLabel } = PACING;
+  const bcn = useMemo(() => roster.filter((r) => r.office === "BCN"), [roster]);
+  const tor = useMemo(() => roster.filter((r) => r.office === "TOR"), [roster]);
+
+  const bcnCal = bcn.find((m) => !m.off?.length)?.cal;
+  const torCal = tor.find((m) => !m.off?.length)?.cal;
+
+  const isPrev = period === "previous";
+
+  const sub = isPrev
+    ? `Month closed · ${PREVIOUS_MONTH?.sdrCount ?? "-"} SDRs${PREVIOUS_MONTH?.note ? ` · ${PREVIOUS_MONTH.note}` : ""}`
+    : `${fmtDate(todayIso)} · Barcelona ${bcnCal ? `${bcnCal.elapsed}/${bcnCal.total}` : "-"} · Toronto ${torCal ? `${torCal.elapsed}/${torCal.total}` : "-"} working days done`;
+
+  return (
+    <Page>
+      <PageHeader
+        num="06 · SDR Pacing"
+        title={isPrev ? `${PREVIOUS_MONTH?.label} pacing, final` : `${monthLabel} pacing`}
+        sub={sub}
+        right={
+          <TabBar
+            size="sm"
+            value={period}
+            onChange={setPeriod}
+            tabs={[
+              { id: "current", label: monthLabel || "Current" },
+              { id: "previous", label: PREVIOUS_MONTH?.label || "Previous" },
+            ]}
+          />
+        }
+      />
+
+      {!isPrev && (
+        <div style={{ marginBottom: 22 }}>
+          <TabBar
+            value={tab}
+            onChange={setTab}
+            tabs={[
+              { id: "team", label: "Team forecast" },
+              { id: "bcn", label: `Barcelona · ${bcn.length}` },
+              { id: "tor", label: `Toronto · ${tor.length}` },
+            ]}
+          />
+        </div>
+      )}
+
+      {isPrev ? (
+        <PreviousTab />
+      ) : tab === "team" ? (
+        <TeamTab roster={roster} actuals={actuals} bcn={bcn} tor={tor} />
+      ) : tab === "bcn" ? (
+        <OfficeTab
+          label="Barcelona" region="EMEA" members={bcn} actuals={actuals}
+          workingDays={offices?.BCN?.workingDays ?? "-"}
+        />
+      ) : (
+        <OfficeTab
+          label="Toronto" region="NA" members={tor} actuals={actuals}
+          workingDays={offices?.TOR?.workingDays ?? "-"}
+        />
+      )}
+
+      <div style={{
+        marginTop: 32, paddingTop: 18, borderTop: `1px solid ${C.border}`,
+        font: `400 ${T.micro}px/1.6 ${FONT_SANS}`, color: C.textHint, maxWidth: "76ch",
+        display: "flex", flexDirection: "column", gap: 8,
+      }}>
+        <p style={{ margin: 0 }}>
+          Each target is that SDR's daily rate multiplied by their own working days
+          this month, so time off and a reduced quota are already in the number.
+          Pace compares what is booked to what is expected after the days completed
+          so far; the tick on every bar is where expected sits. Today counts as a
+          day still to be worked.
+        </p>
+        <p style={{ margin: 0, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <StatusDot level="ok" /> on pace, 100%+
+          </span>
+          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <StatusDot level="warn" /> slightly behind, 80-99%
+          </span>
+          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <StatusDot level="risk" /> needs attention, under 80%
+          </span>
+          {GENERATED_AT && (
+            <span style={{ marginLeft: "auto", fontFamily: FONT_MONO, color: C.textFaint }}>
+              pulled {new Date(GENERATED_AT).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
+        </p>
+      </div>
+    </Page>
   );
 }

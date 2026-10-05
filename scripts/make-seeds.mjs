@@ -142,25 +142,64 @@ PERFORMANCE.pacing.dayOfMonth = _now.getUTCDate();
 PERFORMANCE.pacing.daysInMonth = new Date(Date.UTC(_y, _m + 1, 0)).getUTCDate();
 `;
 
+// Same reasoning as PERFORMANCE_TAIL, for the two modules whose constants come
+// from a config file rather than from the pull. The skeletoniser would zero
+// `slaHours` and `target`, and both components divide by them.
+const DEALS_TAIL = `
+import { SLA_HOURS, MONTHLY_TARGET_EUR, POINTS_QUOTA } from "../../deals.config.js";
+
+const _now = new Date();
+const _pad = (n) => String(n).padStart(2, "0");
+
+DEALS.slaHours = SLA_HOURS;
+DEALS.target = MONTHLY_TARGET_EUR;
+DEALS.pointsQuota = POINTS_QUOTA;
+DEALS.todayIso = \`\${_now.getUTCFullYear()}-\${_pad(_now.getUTCMonth() + 1)}-\${_pad(_now.getUTCDate())}\`;
+DEALS.monthStart = \`\${_now.getUTCFullYear()}-\${_pad(_now.getUTCMonth() + 1)}-01\`;
+DEALS.monthLabel = _now.toLocaleString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+`;
+
+const PACING_TAIL = `
+const _now = new Date();
+const _pad = (n) => String(n).padStart(2, "0");
+
+PACING.todayIso = \`\${_now.getUTCFullYear()}-\${_pad(_now.getUTCMonth() + 1)}-\${_pad(_now.getUTCDate())}\`;
+PACING.monthLabel = _now.toLocaleString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+`;
+
 // Exports the components actually import, per module. Anything a data.js happens
-// to carry but nothing imports is left out of the seed on purpose.
+// to carry but nothing imports is left out of the seed on purpose. `num` is the
+// display number the banner quotes; it tracks the registry in src/lib/modules.js.
 const MODULES = {
   briefing: {
+    num: "02",
     keep: [],
     tail: BRIEFING_SEED_BODY,
   },
   performance: {
+    num: "04",
     keep: ["PERFORMANCE", "GEO_MONTHLY", "MQL_GEO_MONTHLY", "PROGRESSION_GEO"],
     tail: PERFORMANCE_TAIL,
   },
   selfserved: {
+    num: "05",
     keep: ["SELFSERVED"],
     tail: SELFSERVED_TAIL,
+  },
+  pacing: {
+    num: "06",
+    keep: ["PACING"],
+    tail: PACING_TAIL,
+  },
+  deals: {
+    num: "07",
+    keep: ["DEALS"],
+    tail: DEALS_TAIL,
   },
 };
 
 async function main() {
-  for (const [mod, { keep, tail }] of Object.entries(MODULES)) {
+  for (const [mod, { num, keep, tail }] of Object.entries(MODULES)) {
     const real = resolve(ROOT, `src/modules/${mod}/data.js`);
     let live;
     try {
@@ -169,7 +208,7 @@ async function main() {
       console.error(`skip ${mod}: no local data.js to derive a shape from`);
       continue;
     }
-    let body = BANNER(mod === "briefing" ? "01" : mod === "performance" ? "03" : "04");
+    let body = BANNER(num);
     for (const name of keep) {
       if (!(name in live)) {
         console.error(`skip ${mod}.${name}: not exported by the live data.js`);

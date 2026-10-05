@@ -1,10 +1,16 @@
 import { useState, useEffect } from "react";
 import MinutesCalc from "./MinutesCalc.jsx";
 import CostCalc from "./CostCalc.jsx";
+import { TabBar } from "../../design/ui.jsx";
+import { C, T, TRACK, FONT_SANS, FONT_MONO } from "../../lib/tokens.js";
 
-// Module 03 - Calculator hub. Two tabs over a shared blue palette:
+// Module 03 - Calculator hub. Two tabs over the shared canvas:
 //   Minutes  - per-user calling time estimator
-//   Cost     - onboarding cost / quote estimator
+//   PAYG     - pay-as-you-go cost / quote estimator
+//
+// Unlike every other module these two are interactive tools rather than
+// read-outs, so they keep their own internal layout and own their scroll. The
+// hub only supplies the chrome: same canvas, same header grammar, same tabs.
 const TABS = [
   { id: "minutes", label: "Minutes" },
   { id: "cost", label: "PAYG" },
@@ -17,28 +23,28 @@ export default function CalculatorModule({ intent }) {
   }, [intent]);
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#060810" }}>
-      <div style={{
-        display: "flex", gap: 6, padding: "12px 16px", flexShrink: 0,
-        borderBottom: "1px solid rgba(80,130,255,0.12)", background: "#080c18",
-      }}>
-        {TABS.map((t) => {
-          const on = tab === t.id;
-          return (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              style={{
-                padding: "7px 16px", borderRadius: 9, fontSize: 13, fontWeight: 500,
-                fontFamily: "system-ui,-apple-system,sans-serif", cursor: "pointer",
-                transition: "all .15s",
-                background: on ? "rgba(26,86,255,0.14)" : "transparent",
-                border: `1px solid ${on ? "rgba(80,130,255,0.38)" : "rgba(80,130,255,0.1)"}`,
-                color: on ? "#4d82ff" : "rgba(180,205,255,0.5)",
-                boxShadow: on ? "0 0 12px rgba(26,86,255,0.18)" : "none",
-              }}>
-              {t.label}
-            </button>
-          );
-        })}
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: C.bgGlow }}>
+      <div
+        style={{
+          display: "flex", alignItems: "center", gap: 18,
+          padding: "16px 28px", flexShrink: 0,
+          borderBottom: `1px solid ${C.divider}`,
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+          <span style={{ fontFamily: FONT_MONO, fontSize: T.label, color: C.textFaint, letterSpacing: TRACK.label }}>
+            03
+          </span>
+          <span
+            style={{
+              fontFamily: FONT_SANS, fontSize: T.bodyLg, fontWeight: 600,
+              color: C.text, letterSpacing: TRACK.tight,
+            }}
+          >
+            Calculator
+          </span>
+        </div>
+        <TabBar tabs={TABS} value={tab} onChange={setTab} size="sm" />
       </div>
       <div style={{ flex: 1, minHeight: 0 }}>
         {tab === "minutes" ? <MinutesCalc /> : <CostCalc />}

@@ -22,26 +22,25 @@ them from there; never inline an owner id into a query.
 
 ## Refresh scope and cadence
 
-Wraps **modules 01, 05 (Coach), 03 (Performance), 04 (Self-Served), 06 (SDR Pacing), 07 (Demos)** at the trigger.
+Wraps **modules 02 (Today), 04 (Performance), 05 (Self-Served), 06 (SDR Pacing), 07 (Deals)** at the trigger.
 
-**Cadence: 09:00, 11:00, 13:00, 15:00, 17:00 CET, Mon-Fri.** The 09:00 slot is a **full run** (01, then 05, then 03, then 04, then 06, then 07). Every later slot is a **module 01 + 05 top-up**: 01 then 05, 03/04/06/07 untouched. Meetings get booked into the current day after the morning brief is written, so a once-a-day 01 is structurally behind by lunchtime; 03/04 are YTD and 90-day trend series that do not move five times a day. 17:00 is the last slot - a call booked after 18:00 CET is not a same-day call, so the next 09:00 run serves it.
+**Cadence: 09:00, 11:00, 13:00, 15:00, 17:00 CET, Mon-Fri.** The 09:00 slot is a **full run** (02, then 04, then 05, then 06, then 07). Every later slot is a **module 02 top-up**: 02 only, 04/05/06/07 untouched. Meetings get booked into the current day after the morning brief is written, so a once-a-day 02 is structurally behind by lunchtime; 04/05 are YTD and 90-day trend series that do not move five times a day. 17:00 is the last slot - a call booked after 18:00 CET is not a same-day call, so the next 09:00 run serves it.
 
 Run type is read off `src/modules/briefing/data.js`: `TODAY_ISO` already equal to today means a full run landed today, so this is a top-up; `TODAY_ISO` older than today means full run. A manual trigger with no instruction defaults to a full run.
 
 | Module | id | Sources | Pull discipline |
 |--------|-----|---------|-----------------|
-| 01 Today / Schedule | `briefing` | Google Calendar + HubSpot + Gmail | calendar via browser, HubSpot per-contact lookup, Gmail via browser |
-| 03 Performance | `performance` | HubSpot | `/hs` (server-side GROUP BY aggregation) |
-| 04 Self-Served | `selfserved` | HubSpot | `/hs` + per-contact deal-association check |
-| 05 Coach | `coach` | briefing + performance + selfserved data.js | LLM generation via `gen-coach.mjs` |
+| 02 Today / Schedule | `briefing` | Google Calendar + HubSpot + Gmail | calendar via browser, HubSpot per-contact lookup, Gmail via browser |
+| 04 Performance | `performance` | HubSpot | `/hs` (server-side GROUP BY aggregation) |
+| 05 Self-Served | `selfserved` | HubSpot | `/hs` + per-contact deal-association check |
 | 06 SDR Pacing | `pacing` | HubSpot | `/hs` (per-SDR SQL/SQO aggregation) |
-| 07 Demos | `demos` | HubSpot | `/hs` (deal-level demo pull + enrichment) |
+| 07 Deals | `deals` | HubSpot | `search_crm_objects` (deal-level pull + enrichment) |
 
-**Order is a hard gate, not a preference.** `briefing/data.js` must be written and verified by `gen-briefing.mjs` before the first module 03 or 04 query is issued. Module 01 briefs calls happening within hours; 03 and 04 are trend data that tolerate a day of staleness. A run that burns its first stretch on YTD aggregations and then dies has failed at the only thing that could not wait. A failed 01 therefore stops the run; a failed 03 continues to 04. Modules 06 and 07 run after 04, in that order. A failed 06 continues to 07.
+**Order is a hard gate, not a preference.** `briefing/data.js` must be written and verified by `gen-briefing.mjs` before the first module 04 or 05 query is issued. Module 02 briefs calls happening within hours; 04 and 05 are trend data that tolerate a day of staleness. A run that burns its first stretch on YTD aggregations and then dies has failed at the only thing that could not wait. A failed 02 therefore stops the run; a failed 04 continues to 05. Modules 06 and 07 run after 05, in that order. A failed 06 continues to 07.
 
-The other two surviving modules pull nothing: 00 Dashboard derives its tiles from the registry, 02 Calculator is pure client-side computation. Pre-Call SE now lives outside this app (`cloudtalk-precall-se/`, entered via the `pcb-cloudtalk` skill); Competitor was removed.
+The other two modules pull nothing: 01 Dashboard derives its alert ladder and tiles from the other modules' `data.js` already on disk, 03 Calculator is pure client-side computation. Neither has a generator. Pre-Call SE now lives outside this app (`cloudtalk-precall-se/`, entered via the `pcb-cloudtalk` skill); Competitor and Coach were removed.
 
-## `/hs` discipline (modules 03 and 04)
+## `/hs` discipline (modules 04, 05 and 06)
 
 - Call `tool_guidance` once before the first `query_crm_data` of a run.
 - Aggregate **server-side** with `GROUP BY` + `COUNT(*)` / `SUM(...)`. Never pull rows and count client-side - that path undercounts (see CLAUDE.md memory).
@@ -56,7 +55,7 @@ A per-month loop returns byte-identical output at 8x the round-trips, and nothin
 
 ### Parallelize the aggregations
 
-The module 03 metrics have no interdependencies. Issue them in parallel batches (4-6 concurrent; HubSpot's per-portal concurrency limit is not documented here, so stay conservative rather than discovering it mid-run) instead of one at a time. A run is latency-bound on round-trips, not on HubSpot's aggregation work.
+The module 04 metrics have no interdependencies. Issue them in parallel batches (4-6 concurrent; HubSpot's per-portal concurrency limit is not documented here, so stay conservative rather than discovering it mid-run) instead of one at a time. A run is latency-bound on round-trips, not on HubSpot's aggregation work.
 
 This is a correctness measure as much as a speed one. `gen-performance.mjs` documents a known MQL drift whose stated cause is two counts "pulled moments apart" - independent `COUNT`s against a moving pipeline. Compressing the pull into a tight window shrinks that skew. A snapshot should be a snapshot.
 
@@ -64,7 +63,7 @@ Exception: the Step 0 preflight stays strictly sequential. Its purpose is attrib
 
 ---
 
-## Module 01 - Today / Schedule
+## Module 02 - Today / Schedule
 
 File: `src/modules/briefing/data.js`. Component (`BriefingModule.jsx`) is never touched by a refresh.
 
@@ -155,7 +154,7 @@ Names, emails, phones are pulled. They live in `data.js` for the **local dashboa
 
 ---
 
-## Module 03 - Performance
+## Module 04 - Performance
 
 File: `src/modules/performance/data.js`. Single export `PERFORMANCE`. All counts via `/hs` GROUP BY.
 
@@ -199,7 +198,7 @@ GROUP BY country, m
 
 ---
 
-## Module 04 - Self-Served
+## Module 05 - Self-Served
 
 File: `src/modules/selfserved/data.js`. Single export `SELFSERVED` (+ `onboardingAlertCount`). Rolling 90-day window ending today.
 
@@ -244,49 +243,11 @@ Eligibility judged on contact-level deal association (`associations.DEAL`).
 
 ### PII handling
 
-Same as module 01: names, emails, phones are present; local dashboard only; never logged, transmitted, or stored in memory.
+Same as module 02: names, emails, phones are present; local dashboard only; never logged, transmitted, or stored in memory.
 
 ---
 
-## Module 05 - Coach (AI strategy)
-
-File: `src/modules/coach/data.js`. Single export `COACH`. PII-free: references cards by index, not by name/email.
-
-### Generation
-
-`scripts/gen-coach.mjs` runs during the `briefing-daily` refresh, after module 01 ships. It reads the three data.js files (`briefing`, `performance`, `selfserved`) and sends them with the system prompt from `scripts/lib/coach-prompt.mjs` to Claude. The response is validated and written through the `refresh-core.mjs` pipeline.
-
-### Cadence
-
-- **Full run (09:00)**: after module 01, before module 03. Order: 01 -> 05 -> 03 -> 04.
-- **Top-up run (11:00/13:00/15:00/17:00)**: after module 01, every time.
-
-If performance or selfserved data is stale (yesterday's), the generator still runs - the brief's primary value comes from today's calendar, which is always fresh.
-
-### Data shape
-
-```js
-export const COACH = {
-  generatedAt: "ISO",
-  todayIso: "YYYY-MM-DD",
-  priorities: [{ rank, type, title, detail, linkedModule, linkedEntity, urgency }],
-  pipelinePulse: { summary, risks: [], opportunities: [] },
-  weekRead: "...",
-  dataGaps: [],
-};
-```
-
-### Validation
-
-1. `priorities` is 1-8 items, each with all required keys.
-2. Every `linkedModule` is one of "01", "03", "04".
-3. `pipelinePulse.summary` is non-empty.
-4. `urgency` is one of "high", "medium", "low".
-5. No email address anywhere in the serialized output (PII leak check).
-
----
-
-## Module 05 - SDR Pacing
+## Module 06 - SDR Pacing
 
 File: `src/modules/pacing/data.js`. Single export `PACING`. All counts via `/hs` GROUP BY across the full SDR roster.
 
@@ -351,102 +312,107 @@ Full run only (09:00). Not on top-up runs - pacing numbers move once a day at mo
 
 ---
 
-## Module 06 - Demos at Stake
+## Module 07 - Deals
 
-File: `src/modules/demos/data.js`. Single export `DEMOS`. Deal-level pull via `/hs`, enriched per-demo.
+File: `src/modules/deals/data.js`. Single export `DEALS`. Deal-level pull via `search_crm_objects`, enriched per deal. Config in `src/deals.config.js`.
 
 ### What it tracks
 
-Demos booked on Santiago Subra's deals only (`deal_creator__sdr_only_ = '87191703'`). Tracks MRR at stake, segment mix, no-show rate, and speed-to-demo. Horizon window: 15 working days forward, 20 working days back, 8-week history.
+Every deal the operator created this calendar month, and what the AEs then did with it. The module is a four-column kanban by outcome - Upcoming, Awaiting decision, Accepted, Rejected - so the question it answers is not "how many demos" but "where is the month stuck".
 
 ### Cohort
 
-A demo is an inbound-SDR deal with a booked demo slot (`demo_call__date_time_` is set):
+One rule, deliberately wide: **every deal created in the current calendar month** where the operator is the creator.
 
-- `deal_creator__sdr_only_` = `'87191703'` (Santiago Subra only)
-- `demo_call__date_time_` within the pull window (20 working days back through 15 working days forward from today)
-- Exclude deals already past AE acceptance with > 24h grace: if `deal_accepted_by_ae = 'true'` AND `accepted_deal__date_time_` < today - 1 day, skip
+- `deal_creator__sdr_only_` = `<ownerId>`
+- `createdate` >= first day of the current month, 00:00 local
+
+Note what is **not** in the cohort rule. There is no demo-date filter and no acceptance-grace exclusion. A deal with no demo booked is still a deal the operator created this month, and a deal accepted three weeks ago is still part of this month's accepted total. Both were excluded by the old demo-window cohort, which is why the old module could not total the month.
 
 ### Pull
 
 Use `search_crm_objects` (not `query_crm_data`) because individual deal records are needed, not aggregates. Read `total`, paginate to it.
 
 **Properties to request:**
-`dealname`, `deal_creator__sdr_only_`, `demo_call__date_time_`, `hubspot_owner_id`, `amount_in_home_currency`, `deal_currency_code`, `country`, `hs_analytics_source`, `dealstage`, `createdate`, `deal_accepted_by_ae`, `accepted_deal__date_time_`, `demo_no_show_status`, `closedate`
+`dealname`, `deal_creator__sdr_only_`, `demo_call__date_time_`, `hubspot_owner_id`, `amount_in_home_currency`, `deal_sdr_points_number`, `dealstage`, `createdate`, `deal_accepted_by_ae`, `accepted_deal__date_time_`, `rejected_deal_timestamp`, `deal_demo_no_show_status`
 
 **Filter:**
 ```json
 {
   "filterGroups": [{
     "filters": [
-      { "propertyName": "deal_creator__sdr_only_", "operator": "EQ", "value": "87191703" },
-      { "propertyName": "demo_call__date_time_", "operator": "BETWEEN", "value": "<window_start_epoch_ms>", "highValue": "<window_end_epoch_ms>" }
+      { "propertyName": "deal_creator__sdr_only_", "operator": "EQ", "value": "<ownerId>" },
+      { "propertyName": "createdate", "operator": "GTE", "value": "<month_start_epoch_ms>" }
     ]
   }]
 }
 ```
 
-### Per-demo enrichment
+### Per-deal enrichment
 
 For each deal returned:
 
-1. **SDR name** - always "Santiago Subra" (single-operator scope).
-2. **AE name** - `hubspot_owner_id` is the current owner (AE after handoff). Look up owner name via `search_owners`.
-3. **Segment** - apply `segOf(amount_in_home_currency)` from `demos.config.js`: micro < 500, smb 500-1500, mm > 1500, none if null.
-4. **No-show status** - apply `noShowState(demo_no_show_status)` from `demos.config.js`: "ok", "noshow", or "rescheduled".
-5. **Speed-to-demo** - working hours between `createdate` and `demo_call__date_time_`, weekends excluded. `slow = speedH >= 48`.
-6. **In play** - `true` unless `ns === "noshow"` or deal is in a won/lost stage (stage IDs from `demos.config.js`).
-7. **Closed** - if dealstage is in `WON_STAGES` -> "won"; in `LOST_STAGES` -> "lost"; else `null`.
-8. **Office** - always "BCN" (single-operator scope).
-9. **Key** - ISO date portion of `demo_call__date_time_` (the calendar day the demo is booked on).
-10. **Time** - HH:MM portion of `demo_call__date_time_`, converted to the office's local timezone (BCN -> Europe/Madrid, TOR -> America/Toronto).
+1. **AE name** - `hubspot_owner_id` is the current owner (the AE after handoff). Resolve via `search_owners`. Unassigned -> `"Unassigned"`.
+2. **Outcome** - the single field the kanban is built on, derived in this order:
+   - `deal_accepted_by_ae = 'true'` -> `"accepted"`
+   - `deal_accepted_by_ae = 'false'` -> `"rejected"`
+   - no ruling, and `demo_call__date_time_` is in the future -> `"upcoming"`
+   - otherwise -> `"pending"`
+3. **Segment** - `segOf(amount_in_home_currency)` from `deals.config.js`: micro < 500, smb 500-1500, mm > 1500, none if null.
+4. **No-show status** - `noShowState(deal_demo_no_show_status)`: "ok", "noshow", or "rescheduled". Note the property is `deal_demo_no_show_status`, not `demo_no_show_status`.
+5. **Age** - `ageH`, hours on the clock the deal is racing. **The clock starts at the demo**, because the SLA is on the AE, not on the SDR: `demoAt` if set, else `created`. A deal with no demo ages from creation, which is the correct read - nothing is going to move it without a booking.
+6. **Points** - `deal_sdr_points_number`, 0 if null. These are what commission actually pays on.
+
+Breach is **not** a payload field. `ageH > slaHours` on a `pending` deal is derived in the generator and again in the component. A stored `breaching` flag is a second source of truth that goes wrong the moment the clock moves past it.
 
 ### Payload shape
 
 ```js
 {
   todayIso: "YYYY-MM-DD",
-  demos: [{
+  monthLabel: "October 2026",
+  monthStart: "2026-10-01",
+  slaHours: 48,              // deals.config.js SLA_HOURS
+  target: 12000,             // deals.config.js MONTHLY_TARGET_EUR - a run-rate line, not a quota
+  pointsQuota: 90,           // deals.config.js POINTS_QUOTA
+  deals: [{
     id: "<dealId>",
     name: "<dealname>",
-    key: "YYYY-MM-DD",        // demo date
-    time: "HH:MM",            // local to office TZ
-    office: "BCN" | "TOR",
-    sdrId: "<ownerId>",
-    sdr: "Name",
     ae: "Name",
     amt: 1200,                 // amount_in_home_currency (EUR)
+    pts: 3,                    // deal_sdr_points_number
     seg: "micro" | "smb" | "mm" | "none",
-    country: "ES",
-    src: "Inbound",            // hs_analytics_source
-    speedH: 22,                // working hours deal-create -> demo
-    slow: false,               // speedH >= 48
     ns: "ok" | "noshow" | "rescheduled",
-    closed: null | "won" | "lost",
-    inPlay: true,
-    url: "https://app.hubspot.com/contacts/6195055/record/0-2/<dealId>"
+    outcome: "upcoming" | "pending" | "accepted" | "rejected",
+    created: "<ISO>",
+    demoAt: "<ISO>" | null,
+    ageH: 31.5,                // hours since demoAt, else since created
+    decidedAt: "<ISO>" | null, // accepted_deal__date_time_ or rejected_deal_timestamp
+    country: "ES" | null
   }],
-  roster: {
-    "87191703": { name: "Santiago Subra", office: "BCN", lead: false }
-  }
+  dataGaps: ["<string>"]       // declared misses; rendered verbatim by the module
 }
 ```
 
-Write to temp file, run `node scripts/gen-demos.mjs <payload.json>`.
+`decidedAt` and `country` are carried but not yet rendered. They are cheap to pull in the same request and the alternative - discovering mid-build that the ruling timestamp was never captured - costs a whole re-pull. Keep populating them.
+
+Write to temp file, run `node scripts/gen-deals.mjs <payload.json>`.
 
 ### Reconciliation
 
-- `DEMOS` has `todayIso`, `demos` (array), `roster` (object).
-- Every demo has required keys: `id`, `name`, `key`, `time`, `office`, `sdrId`, `sdr`, `seg`, `ns`, `inPlay`.
-- Valid `office`: BCN, TOR. Valid `seg`: micro, smb, mm, none. Valid `ns`: ok, noshow, rescheduled.
+- `DEALS` has `todayIso`, `monthLabel`, `monthStart`, `slaHours`, `target`, `pointsQuota`, `deals`.
+- `slaHours` is a positive number.
+- Every deal has required keys: `id`, `name`, `ae`, `amt`, `pts`, `seg`, `ns`, `outcome`, `created`, `demoAt`, `ageH`.
+- Valid `seg`: micro, smb, mm, none. Valid `ns`: ok, noshow, rescheduled. Valid `outcome`: upcoming, pending, accepted, rejected.
+- **`outcome: "upcoming"` requires a non-null `demoAt`.** A deal is upcoming *because* a demo is booked in the future. Without one the classification is unprovable, so the generator throws rather than let the column fill with deals that merely have no outcome yet.
 
 ### Cadence
 
-Full run only (09:00). Not on top-up runs - demo bookings do not change intraday at the frequency that justifies re-pulling.
+Full run only (09:00). Not on top-up runs - AE rulings do not land at a frequency that justifies re-pulling five times a day, and the 48h SLA clock is derived at render time from `created`/`demoAt`, so the breach count stays correct between refreshes without a re-pull.
 
 ### PII handling
 
-`demos[].name` is a deal name (company), not a person's name. No personal contact data in the payload. Safe from a PII standpoint, but `data.js` is still gitignored as a matter of policy.
+`deals[].name` is a deal name (company) and `deals[].ae` is a colleague, not a prospect. No personal contact data in the payload. Safe from a PII standpoint, but `data.js` is still gitignored as a matter of policy.
 
 ---
 
@@ -456,7 +422,7 @@ Before writing `data.js`:
 
 1. **Parse** the generated module to confirm it is valid JS (the file must `export` cleanly).
 2. **Shape check** - required keys present, arrays non-degenerate, no `undefined`/`NaN` in numeric fields.
-3. **Reconciliation** - module 03/04 totals must equal the sum of their parts (e.g. funnel SQL = sum of seat-tier SQL; `eligible` = `noDeal` + `closedLostReengage`). A mismatch means a client-side count slipped in - re-pull via `/hs`.
+3. **Reconciliation** - module 04/05 totals must equal the sum of their parts (e.g. funnel SQL = sum of seat-tier SQL; `eligible` = `noDeal` + `closedLostReengage`). A mismatch means a client-side count slipped in - re-pull via `/hs`.
 
 Steps 1-3 are enforced by `scripts/lib/refresh-core.mjs`, not by judgement - the generator throws rather than writing a payload that fails any of them.
 

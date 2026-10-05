@@ -16,7 +16,7 @@ import { dirname, resolve } from "node:path";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
-const MODULES = ["briefing", "performance", "selfserved"];
+const MODULES = ["briefing", "performance", "selfserved", "pacing", "deals"];
 
 // config.js is gitignored so it never carries a real name or owner id into the
 // repo. Same absent-only rule: an existing one holds the operator's answers.

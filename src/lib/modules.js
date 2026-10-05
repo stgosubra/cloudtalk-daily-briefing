@@ -13,20 +13,20 @@
 //   num     two-digit display number; also what the command palette searches
 //   label   nav + tile title
 //   sub     one-line subtitle
-//   accent  palette accent key (see lib/palette.js)
+//   accent  palette accent key (see lib/tokens.js)
 //   status  "live" - the only value. Kept because the nav renders a live dot from it
 //   signal  static one-line metric shown on the tile; null means the tile computes
-//           it at render time (module 01 derives it from live briefing data)
+//           it at render time (module 02 derives it from live briefing data)
 //   primary marks the single hero tile on the Constellation
 
 export const MODULES = [
-  { id: "dashboard",   num: "00", label: "Dashboard",   sub: "Constellation",    accent: "purple",  status: "live" },
-  { id: "briefing",    num: "01", label: "Today",       sub: "Schedule",         accent: "blue",    status: "live", signal: null,                 primary: true },
-  { id: "calculator",  num: "02", label: "Calculator",  sub: "Minutes / cost",   accent: "blue",    status: "live", signal: "Cost - Minutes" },
-  { id: "performance", num: "03", label: "Performance", sub: "SQL / SQO",        accent: "emerald", status: "live", signal: "SQL / SQO tracker" },
-  { id: "selfserved",  num: "04", label: "Self-Served", sub: "Untouched MQLs",   accent: "emerald", status: "live", signal: "Re-engage cohort" },
-  { id: "pacing",      num: "05", label: "SDR Pacing",  sub: "Team tracker",     accent: "orange",  status: "live", signal: "SQL / SQO pacing" },
-  { id: "demos",       num: "06", label: "Demos",       sub: "At stake",         accent: "amber",   status: "live", signal: "Demo tracker" },
+  { id: "dashboard",   num: "01", label: "Dashboard",   sub: "What needs you",   accent: "purple",  status: "live" },
+  { id: "briefing",    num: "02", label: "Today",       sub: "Schedule",         accent: "blue",    status: "live", signal: null,                 primary: true },
+  { id: "calculator",  num: "03", label: "Calculator",  sub: "Minutes / cost",   accent: "blue",    status: "live", signal: "Cost - Minutes" },
+  { id: "performance", num: "04", label: "Performance", sub: "SQL / SQO",        accent: "emerald", status: "live", signal: "SQL / SQO tracker" },
+  { id: "selfserved",  num: "05", label: "Self-Served", sub: "Untouched MQLs",   accent: "emerald", status: "live", signal: "Re-engage cohort" },
+  { id: "pacing",      num: "06", label: "SDR Pacing",  sub: "Team tracker",     accent: "orange",  status: "live", signal: "SQL / SQO pacing" },
+  { id: "deals",       num: "07", label: "Deals",       sub: "Awaiting AE",      accent: "amber",   status: "live", signal: "Deal outcomes" },
 ];
 
 // The Constellation shows every module except itself.

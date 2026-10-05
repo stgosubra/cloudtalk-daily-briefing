@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
-import { motion, AnimatePresence, useSpring, useTransform } from "framer-motion";
-import { AuroraBackdrop, GlassCard, GlowButton, NeonDivider, HudLabel } from "../../design/primitives/index.js";
-import { COLOR, TYPE } from "../../design/tokens.js";
-import { OWNER } from "../../config.js";
+import { motion, AnimatePresence } from "framer-motion";
+import { Card, SectionLabel, Page, PageHeader, Stat, StatRow } from "../../design/ui.jsx";
+import { C, R, SHADOW, T, TRACK, FONT_SANS, FONT_MONO, FONT_DISPLAY, OWNER } from "../../lib/tokens.js";
 import {
   TODAY_LABEL,
   REFRESHED_AT,
@@ -29,66 +28,12 @@ const toMin = (t) => {
 const fromMin = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 
 // ============ CULT UI DESIGN TOKENS ============
-const CARD_SHADOW = "0 1px 0 0 rgba(255,255,255,0.03) inset, 0 0 0 1px rgba(255,255,255,0.04) inset, 0 0 0 1px rgba(0,0,0,0.18), 0 2px 2px rgba(0,0,0,0.12), 0 4px 4px rgba(0,0,0,0.1), 0 8px 8px rgba(0,0,0,0.08)";
-const CARD_SHADOW_HOVER = "0 1px 0 0 rgba(255,255,255,0.07) inset, 0 0 0 1px rgba(255,255,255,0.08) inset, 0 0 0 1px rgba(0,0,0,0.22), 0 4px 8px rgba(0,0,0,0.18), 0 8px 20px rgba(0,0,0,0.14), 0 0 0 3px rgba(89,112,255,0.10)";
+const CARD_SHADOW = SHADOW.card;
+const CARD_SHADOW_HOVER = SHADOW.cardHover;
 
-// Cult UI AnimatedNumber - spring-animated digit display
-function AnimatedNumber({ value, format }) {
-  const fmt = format || ((n) => String(Math.round(n)));
-  const spring = useSpring(value, { mass: 0.8, stiffness: 75, damping: 15 });
-  const display = useTransform(spring, fmt);
-  useEffect(() => { spring.set(value); }, [spring, value]);
-  return <motion.span style={{ fontVariantNumeric: "tabular-nums" }}>{display}</motion.span>;
-}
-
-// === COCKPIT DARK PALETTE (CloudTalk tokens, dark-tuned) ===
-// Brand blue shifts lighter on dark (brand-300 #5970ff) so it stays legible;
-// *Bg keys are deep tints, *Border keys are mid stops. Keys unchanged from the
-// light theme so every existing C.* reference keeps working.
-// Palette pivoted to the Phase 1 design system (obsidian base + iris/violet
-// primary + cyan & magenta bleeds). Keys are unchanged so every existing
-// C.* reference inherits the new look automatically; *Bg values are now
-// translucent so the AuroraBackdrop bleeds through cards.
-const C = {
-  bg: "#04050B",                              // true obsidian canvas (aurora sits on top)
-  surface: "rgba(18,22,40,0.62)",             // glass tier 2 - default card fill
-  surfaceAlt: "rgba(28,32,56,0.78)",          // raised/alt surface (nested)
-  border: "rgba(255,255,255,0.06)",           // hairline edge
-  borderHover: "rgba(180,200,255,0.28)",      // active/hover edge
-  text: "#F5F6FF",
-  textMid: "#C7CBE0",
-  textMuted: "#8389A6",
-  textHint: "#5C6080",
-  // Primary brand now reads as iris/violet on a deep canvas.
-  blue:        "#6B5BFF",
-  blueBg:      "rgba(107,91,255,0.16)",
-  blueBorder:  "rgba(107,91,255,0.42)",
-  emerald:     "#4EE5A4",
-  emeraldBg:   "rgba(78,229,164,0.14)",
-  emeraldBorder: "rgba(78,229,164,0.42)",
-  meet:        "#4EE5A4",
-  meetBg:      "rgba(78,229,164,0.14)",
-  meetBorder:  "rgba(78,229,164,0.42)",
-  orange:      "#FF8A5C",
-  orangeBg:    "rgba(255,138,92,0.14)",
-  orangeBorder:"rgba(255,138,92,0.40)",
-  purple:      "#2563eb",
-  purpleBg:    "rgba(37,99,235,0.16)",
-  purpleBorder:"rgba(37,99,235,0.42)",
-  cyan:        "#2EC8FF",
-  cyanBg:      "rgba(46,200,255,0.14)",
-  cyanBorder:  "rgba(46,200,255,0.42)",
-  amber:       "#FFC65A",
-  amberBg:     "rgba(255,198,90,0.14)",
-  amberBorder: "rgba(255,198,90,0.40)",
-  red:         "#FF6464",
-  redBg:       "rgba(255,100,100,0.14)",
-  redBorder:   "rgba(255,100,100,0.40)",
-};
-
-const FONT_SANS = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-const FONT_MONO = "'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace";
-const FONT_DISPLAY = "'Rubik', 'Inter', sans-serif";
+// Palette, type scale and fonts all come from lib/tokens.js now. This module
+// used to carry its own violet/glass `C`, which is why Today looked like a
+// different product from every other module.
 
 // Phase 3 motion - elastic fade-up used for staggered reveal on day mode mount.
 const FADE_UP = {
@@ -197,10 +142,10 @@ function MonogramButton({ initials, color, ariaLabel, title, href, onClick, coun
         <span aria-hidden="true" style={{
           position: "absolute", top: -3, right: -3,
           minWidth: 16, height: 16, padding: "0 4px",
-          borderRadius: 8, background: color, color: "#04050B",
+          borderRadius: 8, background: color, color: C.bg,
           fontFamily: FONT_MONO, fontSize: 9, fontWeight: 700,
           display: "inline-flex", alignItems: "center", justifyContent: "center",
-          boxShadow: `0 0 0 2px #04050B`,
+          boxShadow: `0 0 0 2px ${C.bg}`,
         }}>{count}</span>
       )}
     </>
@@ -502,20 +447,6 @@ function CopyEmail({ email }) {
   );
 }
 
-function LinkBtn({ href, label, color, bg, border, small, solid }) {
-  const padding = small ? "3px 9px" : "5px 12px";
-  const fontSize = small ? 10 : 11;
-  return (
-    <motion.a href={href} target="_blank" rel="noreferrer"
-      whileHover={{ scale: 1.03, boxShadow: `0 0 16px ${color}55, 0 2px 8px rgba(0,0,0,0.3)` }}
-      whileTap={{ scale: 0.97 }}
-      transition={{ type: "spring", stiffness: 300, damping: 20 }}
-      style={{ fontFamily: FONT_SANS, fontSize, fontWeight: 600, textDecoration: "none", padding, borderRadius: 6, border: `1px solid ${solid ? color : border}`, background: solid ? color : bg, color: solid ? "#FFF" : color, whiteSpace: "nowrap", display: "inline-flex", alignItems: "center", gap: 4 }}>
-      {label}
-    </motion.a>
-  );
-}
-
 function LocalTimeBadge({ country }) {
   const tz = country ? TZ_BY_COUNTRY[country.toLowerCase()] : null;
   const [now, setNow] = useState(new Date());
@@ -725,7 +656,7 @@ function ProspectCard({ m, notes, setNotes, index, qualStatus, setQualStatus }) 
       style={{ padding: "16px 18px 16px 19px", background: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${accent}`, borderRadius: 12, marginBottom: 10, boxShadow: CARD_SHADOW, cursor: "default", opacity: isOut ? 0.5 : 1, transition: "opacity 0.18s" }}>
       <div style={{ display: "grid", gridTemplateColumns: "52px 1fr 200px", gap: 14 }}>
         <div style={{ paddingTop: 2 }}>
-          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 22, fontWeight: 700, color: C.blue, lineHeight: 1, marginBottom: 4, fontVariantNumeric: "tabular-nums", textShadow: "0 0 18px rgba(89,112,255,0.45)" }}>{m.start}</div>
+          <div style={{ fontFamily: FONT_DISPLAY, fontSize: 22, fontWeight: 700, color: C.blue, lineHeight: 1, marginBottom: 4, fontVariantNumeric: "tabular-nums" }}>{m.start}</div>
           <div style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.textHint }}>{m.end}</div>
         </div>
         <div style={{ minWidth: 0 }}>
@@ -821,7 +752,7 @@ function WeekCard({ m }) {
   const opacity = m.canceled ? 0.55 : 1;
   return (
     <div onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
-      style={{ padding: "10px 12px", background: C.surface, border: `1px solid ${hov ? C.borderHover : C.border}`, borderLeft: `3px solid ${accent}`, borderRadius: 8, marginBottom: 6, transition: "all 0.14s", opacity, boxShadow: hov ? "0 2px 6px rgba(26,23,20,0.07)" : "0 1px 2px rgba(26,23,20,0.03)" }}>
+      style={{ padding: "10px 12px", background: C.surface, border: `1px solid ${hov ? C.borderHover : C.border}`, borderLeft: `3px solid ${accent}`, borderRadius: 8, marginBottom: 6, transition: "all 0.14s", opacity, boxShadow: hov ? SHADOW.card : "none" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6, marginBottom: 3 }}>
         <span style={{ fontFamily: FONT_MONO, fontSize: 11, fontWeight: 600, color: C.text, fontVariantNumeric: "tabular-nums" }}>{m.start}</span>
         <span style={{ display: "flex", gap: 4, alignItems: "center" }}>
@@ -960,7 +891,7 @@ function Progress({ prospects }) {
       </div>
       <div style={{ height: 5, background: C.border, overflow: "hidden", borderRadius: 3 }}>
         <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ type: "spring", stiffness: 80, damping: 18, delay: 0.1 }}
-          style={{ height: "100%", background: `linear-gradient(90deg, ${C.blue} 0%, #47cd89 100%)`, borderRadius: 3, boxShadow: "0 0 8px rgba(89,112,255,0.4)" }} />
+          style={{ height: "100%", background: `linear-gradient(90deg, ${C.blue} 0%, ${C.emerald} 100%)`, borderRadius: 3 }} />
       </div>
     </div>
   );
@@ -996,13 +927,13 @@ function Timeline({ prospects, otherEvents }) {
         {calls.map((b, i) => (
           <div key={i} title={`${b.name} ${b.start}`}
             style={{ position: "absolute", top: 2, left: `${pct(b.start)}%`, width: `${wPct(b.start, b.end)}%`, height: 14, background: C.blue, opacity: 0.9, overflow: "hidden", borderRadius: 2 }}>
-            <span style={{ fontFamily: FONT_MONO, fontSize: 8, color: "#FFF", padding: "0 3px", lineHeight: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", fontWeight: 600 }}>{b.name}</span>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 8, color: C.bg, padding: "0 3px", lineHeight: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", fontWeight: 600 }}>{b.name}</span>
           </div>
         ))}
         {others.map((b, i) => (
           <div key={i} title={b.name}
             style={{ position: "absolute", top: 18, left: `${pct(b.start)}%`, width: `${wPct(b.start, b.end)}%`, height: 14, background: b.color, opacity: 0.75, overflow: "hidden", borderRadius: 2 }}>
-            <span style={{ fontFamily: FONT_MONO, fontSize: 8, color: "#FFF", padding: "0 3px", lineHeight: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", fontWeight: 600 }}>{b.name}</span>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 8, color: C.bg, padding: "0 3px", lineHeight: "14px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "block", fontWeight: 600 }}>{b.name}</span>
           </div>
         ))}
         {nowMin >= DAY_START && nowMin <= DAY_END && (
@@ -1154,28 +1085,22 @@ function DayStats({ prospects }) {
   const alerts = active.filter((m) => m.leadStatus === "Unable to Contact").length;
   const multi = active.filter((m) => m.multiAttendee).length;
   const noReply = active.filter((m) => m.rsvp === "needsAction").length;
+  // Colour is earned, not decorative: a count only takes a semantic tone once it
+  // actually means something. Zero alerts reads neutral, not red.
   const stats = [
-    { label: "Calls",    val: active.length, sub: null,            color: C.blue,   bg: C.blueBg,   border: C.blueBorder   },
-    { label: "Done",     val: done,          sub: `/ ${active.length}`, color: C.emerald, bg: C.emeraldBg, border: C.emeraldBorder },
-    { label: "Alerts",   val: alerts,        sub: null,            color: C.red,    bg: C.redBg,    border: C.redBorder    },
-    { label: "Multi",    val: multi,         sub: null,            color: C.purple, bg: C.purpleBg, border: C.purpleBorder },
-    { label: "No reply", val: noReply,       sub: null,            color: C.amber,  bg: C.amberBg,  border: C.amberBorder  },
+    { label: "Calls",    val: active.length, of: null,           note: active.length ? "briefed" : "clear calendar" },
+    { label: "Done",     val: done,          of: active.length,  note: done === active.length && active.length ? "day closed" : "elapsed" },
+    { label: "Alerts",   val: alerts,        of: null,           note: alerts ? "unable to contact" : "none",     level: alerts ? "risk" : "ok" },
+    { label: "Multi",    val: multi,         of: null,           note: multi ? "multi-attendee" : "single-threaded" },
+    { label: "No reply", val: noReply,       of: null,           note: noReply ? "RSVP pending" : "all answered", level: noReply ? "warn" : "ok" },
   ];
   return (
-    <div style={{ marginTop: 28, display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
-      {stats.map((s, i) => (
-        <motion.div key={i}
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: i * 0.06, type: "spring", stiffness: 100, damping: 18 }}
-          style={{ padding: "14px 12px 12px", background: s.bg, border: `1px solid ${s.border}`, borderRadius: 12, textAlign: "center", boxShadow: CARD_SHADOW }}>
-          <div style={{ fontSize: 28, fontWeight: 800, color: s.color, lineHeight: 1, letterSpacing: "-0.03em", display: "flex", alignItems: "baseline", justifyContent: "center", gap: 4 }}>
-            <AnimatedNumber value={s.val} />
-            {s.sub && <span style={{ fontSize: 12, fontWeight: 400, color: s.color, opacity: 0.6 }}>{s.sub}</span>}
-          </div>
-          <div style={{ fontFamily: FONT_MONO, fontSize: 8, color: s.color, marginTop: 6, opacity: 0.7, letterSpacing: 1, textTransform: "uppercase" }}>{s.label}</div>
-        </motion.div>
-      ))}
+    <div style={{ marginTop: 28 }}>
+      <StatRow cols={5}>
+        {stats.map((s, i) => (
+          <Stat key={i} label={s.label} value={s.val} of={s.of} size="sm" note={s.note} noteLevel={s.level} />
+        ))}
+      </StatRow>
     </div>
   );
 }
@@ -1198,7 +1123,7 @@ function ViewToggle({ mode, setMode }) {
             style={{ position: "relative", fontFamily: FONT_SANS, fontSize: 11, fontWeight: 600, padding: "5px 14px", borderRadius: 8, border: "none", background: "transparent", color: active ? C.blue : C.textMuted, cursor: "pointer", zIndex: 1, transition: "color 0.18s", display: "inline-flex", alignItems: "center", gap: 5 }}>
             {active && (
               <motion.span layoutId="view-pill"
-                style={{ position: "absolute", inset: 0, borderRadius: 8, background: C.surface, zIndex: -1, boxShadow: "0 1px 3px rgba(0,0,0,0.25)" }}
+                style={{ position: "absolute", inset: 0, borderRadius: 8, background: `linear-gradient(135deg, ${C.blue}2E, ${C.blue}12)`, border: `1px solid ${C.blueBorder}`, zIndex: -1 }}
                 transition={{ type: "spring", bounce: 0.18, duration: 0.34 }} />
             )}
             <span>{icon}</span> {label}
@@ -1218,15 +1143,15 @@ function DayNavigator({ selectedDayIso, setSelectedDayIso }) {
         const callCount = (WEEK_PROSPECTS[d.iso] || []).filter((p) => !p.canceled).length;
         return (
           <button key={d.iso} onClick={() => setSelectedDayIso(d.iso)}
-            style={{ position: "relative", fontFamily: FONT_SANS, padding: "9px 18px", borderRadius: 10, border: "none", background: "transparent", color: active ? "#fff" : C.textMuted, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 76, zIndex: 1, transition: "color 0.2s ease" }}>
+            style={{ position: "relative", fontFamily: FONT_SANS, padding: "9px 18px", borderRadius: 10, border: "none", background: "transparent", color: active ? C.text : C.textMuted, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 76, zIndex: 1, transition: "color 0.2s ease" }}>
             {active && (
               <motion.span layoutId="day-nav-pill"
-                style={{ position: "absolute", inset: 0, borderRadius: 10, background: `linear-gradient(135deg, ${C.blue} 0%, #3b5bff 100%)`, zIndex: -1, boxShadow: "0 2px 8px rgba(89,112,255,0.35)" }}
+                style={{ position: "absolute", inset: 0, borderRadius: 10, background: `linear-gradient(135deg, ${C.blue}2E, ${C.blue}12)`, border: `1px solid ${C.blueBorder}`, zIndex: -1 }}
                 transition={{ type: "spring", bounce: 0.2, duration: 0.4 }} />
             )}
             <span style={{ fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", gap: 4 }}>
               {d.short}
-              {isToday && <span style={{ width: 4, height: 4, borderRadius: "50%", background: active ? "rgba(255,255,255,0.9)" : C.emerald, display: "inline-block" }} />}
+              {isToday && <span style={{ width: 4, height: 4, borderRadius: "50%", background: C.emerald, display: "inline-block" }} />}
             </span>
             <span style={{ fontFamily: FONT_MONO, fontSize: 9, opacity: 0.75, fontVariantNumeric: "tabular-nums" }}>
               {d.dayNum} · {callCount}c
@@ -1247,7 +1172,7 @@ function WeekDayColumn({ day, prospects, isToday }) {
       <div style={{ padding: "10px 12px", background: isToday ? C.blueBg : C.surfaceAlt, border: `1px solid ${isToday ? C.blueBorder : C.border}`, borderRadius: "6px 6px 0 0", borderBottom: "none" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: isToday ? C.blue : C.text }}>{day.name}</span>
-          {isToday && <span style={{ fontFamily: FONT_MONO, fontSize: 8, fontWeight: 700, background: C.blue, color: "#FFF", padding: "1px 6px", borderRadius: 6, letterSpacing: 0.6 }}>TODAY</span>}
+          {isToday && <span style={{ fontFamily: FONT_MONO, fontSize: 8, fontWeight: 700, background: C.blue, color: C.bg, padding: "1px 6px", borderRadius: 6, letterSpacing: 0.6 }}>TODAY</span>}
         </div>
         <div style={{ fontFamily: FONT_MONO, fontSize: 10, color: isToday ? C.blue : C.textMuted, marginBottom: 6 }}>
           {day.dayNum} {day.monthShort}
@@ -1614,39 +1539,41 @@ export default function DailyBriefing() {
     <div style={{
       fontFamily: FONT_SANS,
       minHeight: "100vh",
-      background: C.bg,
+      background: "transparent",
       color: C.text,
       position: "relative",
       overflowX: "clip",
     }}>
-      <AuroraBackdrop />
-
       <div style={{
         position: "relative",
-        zIndex: 10,
         maxWidth: mode === "week" ? 1280 : 1180,
         margin: "0 auto",
-        padding: "44px 24px 80px",
+        padding: "30px 28px 80px",
         transition: "max-width 0.2s ease",
       }}>
 
-        {/* HUD HEADER - bento header card */}
-        <GlassCard tier={1} padding="22px 26px" radius={18} style={{ marginBottom: 22 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 14 }}>
-            <div style={{ minWidth: 0 }}>
-              <HudLabel variant="eyebrow" dot="iris">CloudTalk · Daily Briefing</HudLabel>
-              <div style={{ marginTop: 10 }}><Greeting /></div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <ViewToggle mode={mode} setMode={setMode} />
-              {mode === "day" && <NotificationToggle prospects={dayProspects} />}
-              <HudLabel variant="eyebrow" dot="success">Live · GCal + HubSpot</HudLabel>
-              <GlowButton variant="ghost" size="sm" onClick={() => window.location.reload()}>↻ Reload</GlowButton>
-            </div>
+        <div style={{
+          display: "flex", alignItems: "flex-end", justifyContent: "space-between",
+          flexWrap: "wrap", gap: 14, marginBottom: 24,
+          paddingBottom: 18, borderBottom: `1px solid ${C.border}`,
+        }}>
+          <div style={{ minWidth: 0 }}>
+            <SectionLabel>02 · Today</SectionLabel>
+            <div style={{ marginTop: 10 }}><Greeting /></div>
           </div>
-        </GlassCard>
-
-        <NeonDivider tone="iris" glow style={{ marginBottom: 26 }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <ViewToggle mode={mode} setMode={setMode} />
+            {mode === "day" && <NotificationToggle prospects={dayProspects} />}
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                background: C.wellBg, border: `1px solid ${C.border}`, color: C.textMuted,
+                borderRadius: R.sm, padding: "7px 12px", cursor: "pointer",
+                fontFamily: FONT_MONO, fontSize: T.micro,
+              }}
+            >↻ Reload</button>
+          </div>
+        </div>
 
         {/* DAY MODE - cockpit two-column bento */}
         {mode === "day" && (
@@ -1668,15 +1595,15 @@ export default function DailyBriefing() {
               )}
 
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14, marginTop: 4, flexWrap: "wrap", gap: 8 }}>
-                <HudLabel variant="eyebrow" dot="iris">Agenda spine</HudLabel>
+                <SectionLabel>Agenda spine</SectionLabel>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                   <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.emerald }}>{tally.qualified} demo</span>
                   <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.amber }}>{tally.working} working</span>
                   <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.red }}>{tally.qualified_out} out</span>
                   <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textMuted }}>{tally.pending} pending</span>
-                  <HudLabel variant="eyebrow">
+                  <SectionLabel>
                     {active.length} discovery {other.length > 0 ? `· ${other.length} other` : ""}
-                  </HudLabel>
+                  </SectionLabel>
                 </div>
               </div>
               <AgendaSpine
@@ -1697,18 +1624,13 @@ export default function DailyBriefing() {
             <motion.div variants={FADE_UP} style={{ minWidth: 0 }}>
               <div style={{ position: "sticky", top: 24, display: "flex", flexDirection: "column", gap: 18 }}>
               {/* Day status card (hero in the rail) */}
-              <GlassCard tier={2} tilt sheen padding={20} radius={16} glow={isToday ? "iris" : null}>
-                <HudLabel variant="eyebrow" dot={isToday ? "iris" : null}>
-                  {isToday ? "Today" : "Selected day"}
-                </HudLabel>
+              <Card label={isToday ? "Today" : "Selected day"} pad={20}>
                 <div style={{
-                  marginTop: 10,
                   fontFamily: FONT_DISPLAY,
-                  fontSize: 24,
+                  fontSize: T.title,
                   fontWeight: 600,
                   color: C.text,
-                  letterSpacing: 0.2,
-                  textShadow: "0 0 16px rgba(107,91,255,0.25)",
+                  letterSpacing: TRACK.tight,
                 }}>
                   {dayMeta.name} {dayMeta.dayNum} {dayMeta.monthShort}
                 </div>
@@ -1717,11 +1639,11 @@ export default function DailyBriefing() {
                   <RailStat label="Other"     value={other.length}  tone="cyan" />
                 </div>
                 {!isToday && (
-                  <div style={{ marginTop: 12, ...TYPE.monoDetail, fontStyle: "italic", color: COLOR.text.hint }}>
+                  <div style={{ marginTop: 12, fontFamily: FONT_MONO, fontSize: T.micro, fontStyle: "italic", color: C.textHint }}>
                     HubSpot enrichment runs the morning of
                   </div>
                 )}
-              </GlassCard>
+              </Card>
 
               {isToday && <Progress prospects={dayProspects} />}
               {isToday && <OpenSlots prospects={dayProspects} otherEvents={dayOtherEvents} />}
@@ -1734,10 +1656,10 @@ export default function DailyBriefing() {
         {mode === "week" && (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20, flexWrap: "wrap" }}>
-              <HudLabel variant="eyebrow" dot="iris">
+              <SectionLabel>
                 Week of {WEEK_DAYS[0].dayNum}-{WEEK_DAYS[WEEK_DAYS.length - 1].dayNum} {WEEK_DAYS[0].monthShort} · {Object.values(WEEK_PROSPECTS).reduce((acc, arr) => acc + arr.filter((p) => !p.canceled).length, 0)} calls
-              </HudLabel>
-              <span style={{ ...TYPE.monoDetail, color: COLOR.text.hint }}>Toggle to Day for live timeline + notes</span>
+              </SectionLabel>
+              <span style={{ fontFamily: FONT_MONO, fontSize: T.micro, color: C.textHint }}>Toggle to Day for live timeline + notes</span>
             </div>
             <WeeklyView />
           </>
@@ -1747,16 +1669,16 @@ export default function DailyBriefing() {
         {mode === "reengage" && (
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 20, flexWrap: "wrap" }}>
-              <HudLabel variant="eyebrow" dot="warn">Re-engage · W-1 + W-2 · unqualified only</HudLabel>
-              <span style={{ ...TYPE.monoDetail, color: COLOR.text.hint }}>Yellow = freshest. Mark Done once you've reached out.</span>
+              <SectionLabel>Re-engage · W-1 + W-2 · unqualified only</SectionLabel>
+              <span style={{ fontFamily: FONT_MONO, fontSize: T.micro, color: C.textHint }}>Yellow = freshest. Mark Done once you've reached out.</span>
             </div>
             <ReEngageTab />
           </>
         )}
 
         {/* Footer */}
-        <NeonDivider tone="ink" style={{ marginTop: 40, marginBottom: 16 }} />
-        <div style={{ ...TYPE.monoDetail, color: COLOR.text.hint, letterSpacing: 1, lineHeight: 1.6 }}>
+        <div style={{ marginTop: 40, marginBottom: 16, borderTop: `1px solid ${C.border}` }} />
+        <div style={{ fontFamily: FONT_MONO, fontSize: T.micro, color: C.textFaint, letterSpacing: 1, lineHeight: 1.6 }}>
           {REFRESHED_AT} · {OWNER.email} · Auto-refresh weekdays at 07:30
         </div>
       </div>

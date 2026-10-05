@@ -13,14 +13,14 @@ import * as briefingData from "../modules/briefing/data.js";
 import * as performanceData from "../modules/performance/data.js";
 import * as selfservedData from "../modules/selfserved/data.js";
 import * as pacingData from "../modules/pacing/data.js";
-import * as demosData from "../modules/demos/data.js";
+import * as dealsData from "../modules/deals/data.js";
 
 const SOURCES = [
-  { id: "briefing",    num: "01", label: "Today",       stamp: briefingData.GENERATED_AT },
-  { id: "performance", num: "03", label: "Performance", stamp: performanceData.GENERATED_AT },
-  { id: "selfserved",  num: "04", label: "Self-Served", stamp: selfservedData.GENERATED_AT },
-  { id: "pacing",      num: "05", label: "SDR Pacing",  stamp: pacingData.GENERATED_AT },
-  { id: "demos",       num: "06", label: "Demos",       stamp: demosData.GENERATED_AT },
+  { id: "briefing",    num: "02", label: "Today",       stamp: briefingData.GENERATED_AT },
+  { id: "performance", num: "04", label: "Performance", stamp: performanceData.GENERATED_AT },
+  { id: "selfserved",  num: "05", label: "Self-Served", stamp: selfservedData.GENERATED_AT },
+  { id: "pacing",      num: "06", label: "SDR Pacing",  stamp: pacingData.GENERATED_AT },
+  { id: "deals",       num: "07", label: "Deals",       stamp: dealsData.GENERATED_AT },
 ];
 
 function localDayKey(d) {
@@ -58,7 +58,7 @@ export function declaredGaps() {
   const perf = performanceData.PERFORMANCE;
 
   for (const g of perf?.dataGaps ?? []) {
-    out.push({ num: "03", label: "Performance", text: g });
+    out.push({ num: "04", label: "Performance", text: g });
   }
   // MQL YTD is an independent distinct-contact COUNT, not a sum of the monthly
   // buckets, so a small drift is expected rather than a bug. Worth seeing, not
@@ -67,7 +67,7 @@ export function declaredGaps() {
   if (typeof perf?.mqlYtdDrift === "number" && perf.mqlYtdDrift !== 0) {
     const d = perf.mqlYtdDrift;
     out.push({
-      num: "03",
+      num: "04",
       label: "Performance",
       text: `MQL YTD is ${d > 0 ? `${d} above` : `${Math.abs(d)} below`} the sum of its monthly buckets (independent COUNTs, expected drift)`,
     });

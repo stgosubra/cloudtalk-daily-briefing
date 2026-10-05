@@ -1,74 +1,55 @@
+// Dashboard - module 01.
+//
+// The landing slot has to earn itself. A grid of pretty tiles is a menu, and a
+// menu does not tell you what to do, so the top of this page is an action ladder:
+// every module contributes alerts through a rule, the rules are scored by
+// severity, and the three loudest win the top of the page. The rest stay visible
+// but quiet underneath.
+//
+// The rules are deliberately NOT an LLM call. They are plain arithmetic over the
+// data.js files already on disk - the dashboard must render identically on every
+// refresh with no network, no key and no latency, and a rule that can be read in
+// ten lines can also be argued with.
+//
+// Every alert carries the module it belongs to, so acting on it is one click.
+
 import { useMemo } from "react";
-import { motion } from "framer-motion";
-import { C, FONT_SANS, FONT_MONO, FONT_DISPLAY, OWNER } from "../../lib/palette.js";
 import { TODAY_ISO, WEEK_PROSPECTS, WEEK_OTHER_EVENTS } from "../briefing/data.js";
+import { PERFORMANCE } from "../performance/data.js";
+import { SELFSERVED, onboardingAlertCount } from "../selfserved/data.js";
+import { PACING } from "../pacing/data.js";
+import { DEALS } from "../deals/data.js";
 import { TILE_MODULES } from "../../lib/modules.js";
+import { OWNER } from "../../config.js";
+import {
+  Page, SectionLabel, Stat, StatRow, StatusDot, DataList, DataRow, Empty,
+} from "../../design/ui.jsx";
+import { C, R, T, TRACK, SEMANTIC, LEVEL_ORDER, FONT_SANS, FONT_MONO } from "../../lib/tokens.js";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Constellation Grid - Dashboard landing
-// Dark near-black canvas with asymmetric red/purple corner gradients.
-// 4-col grid of module tiles. Today's module gets a brighter border and lift.
-// ─────────────────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
+// icons
+// ---------------------------------------------------------------------------
+// Monoline, 18px, single stroke weight. Keys match module ids so the lookup
+// needs no special cases.
 
-// Monoline icons - 22px, stroke-only, single path style for visual coherence
+const S = { fill: "none", stroke: "currentColor", strokeWidth: 1.4, strokeLinecap: "round", strokeLinejoin: "round" };
+
 const Icon = {
-  briefing: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" />
-    </svg>
-  ),
-  calculator: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="5" y="3" width="14" height="18" rx="2" />
-      <path d="M8 7h8M8 11h2M12 11h2M16 11h0M8 15h2M12 15h2M16 15h0M8 19h2M12 19h2M16 19h0" />
-    </svg>
-  ),
-  performance: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 18l5-6 4 3 6-9" />
-      <path d="M14 6h4v4" />
-    </svg>
-  ),
-  selfserved: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="8" r="3.5" />
-      <path d="M5 20a7 7 0 0 1 14 0" />
-      <path d="M18 4l1 2 2 1-2 1-1 2-1-2-2-1 2-1z" />
-    </svg>
-  ),
-  pacing: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 18h16" />
-      <rect x="4" y="14" width="4" height="4" rx="1" />
-      <rect x="10" y="10" width="4" height="8" rx="1" />
-      <rect x="16" y="6" width="4" height="12" rx="1" />
-      <path d="M5 6l4 3 4-4 5 4" />
-    </svg>
-  ),
-  demos: (
-    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="4" width="18" height="14" rx="2" />
-      <path d="M10 9l5 3-5 3z" />
-      <path d="M8 21h8" />
-      <path d="M12 18v3" />
-    </svg>
-  ),
+  briefing: <svg viewBox="0 0 24 24" width="18" height="18" {...S}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>,
+  calculator: <svg viewBox="0 0 24 24" width="18" height="18" {...S}><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M8 7h8M8 11h8M8 15h8M8 19h8" /></svg>,
+  performance: <svg viewBox="0 0 24 24" width="18" height="18" {...S}><path d="M3 18l5-6 4 3 6-9" /><path d="M14 6h4v4" /></svg>,
+  selfserved: <svg viewBox="0 0 24 24" width="18" height="18" {...S}><circle cx="12" cy="8" r="3.5" /><path d="M5 20a7 7 0 0 1 14 0" /><path d="M18 4l1 2 2 1-2 1-1 2-1-2-2-1 2-1z" /></svg>,
+  pacing: <svg viewBox="0 0 24 24" width="18" height="18" {...S}><path d="M4 18h16" /><rect x="4" y="14" width="4" height="4" rx="1" /><rect x="10" y="10" width="4" height="8" rx="1" /><rect x="16" y="6" width="4" height="12" rx="1" /></svg>,
+  deals: <svg viewBox="0 0 24 24" width="18" height="18" {...S}><rect x="3" y="5" width="18" height="15" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></svg>,
 };
 
-// Tiles are the shared registry plus this file's SVG icons. Icon keys match
-// module ids, so the lookup needs no special cases. `signal` is static metadata
-// from the registry; module 01's is computed at render time (see todaySignal).
-const TILES = TILE_MODULES.map((m) => ({
-  ...m,
-  icon: Icon[m.id],
-  live: m.status === "live",
-}));
+// ---------------------------------------------------------------------------
+// helpers
+// ---------------------------------------------------------------------------
 
-function formatToday() {
-  const d = new Date();
-  return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-}
+const eur = (n) => `€${Math.round(n ?? 0).toLocaleString("en-GB")}`;
+const sum = (rows, f) => rows.reduce((a, r) => a + (f(r) || 0), 0);
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 function greeting() {
   const h = new Date().getHours();
@@ -78,264 +59,390 @@ function greeting() {
   return "Good evening";
 }
 
-// Live "Today" tile signal - derived from the actual refreshed briefing data
-// (WEEK_PROSPECTS/WEEK_OTHER_EVENTS keyed by TODAY_ISO) instead of a hardcoded
-// count, so it never goes stale relative to what module 01 actually shows.
-function todaySignal() {
-  const calls = WEEK_PROSPECTS[TODAY_ISO]?.length ?? 0;
-  const other = WEEK_OTHER_EVENTS[TODAY_ISO]?.length ?? 0;
-  const total = calls + other;
-  if (total === 0) return "Nothing on the calendar today";
+// ---------------------------------------------------------------------------
+// rules
+// ---------------------------------------------------------------------------
+// One function per module. Each returns zero or more alerts, or null. An alert
+// is { id, level, title, detail, module }. Rules never invent a number - if the
+// underlying field is missing they return nothing, because a dashboard that
+// guesses is worse than a dashboard that is quiet.
+
+function dealAlerts() {
+  const out = [];
+  const sla = DEALS?.slaHours;
+  const deals = DEALS?.deals ?? [];
+  if (!sla) return out;
+
+  const breaching = deals.filter((d) => d.outcome === "pending" && d.ageH > sla);
+  if (breaching.length) {
+    out.push({
+      id: "deals-breach",
+      level: "risk",
+      title: `${plural(breaching.length, "deal")} past the ${sla}h AE SLA`,
+      detail: `${eur(sum(breaching, (d) => d.amt))} MRR sitting undecided. Chase the AE.`,
+      module: "deals",
+    });
+  }
+
+  // A demo inside the next 24h is the only "upcoming" that is actionable today.
+  const now = Date.now();
+  const soon = deals.filter((d) => {
+    if (d.outcome !== "upcoming" || !d.demoAt) return false;
+    const h = (new Date(d.demoAt) - now) / 3600000;
+    return h >= 0 && h <= 24;
+  });
+  if (soon.length) {
+    out.push({
+      id: "deals-demo-soon",
+      level: "warn",
+      title: `${plural(soon.length, "demo")} in the next 24h`,
+      detail: `${eur(sum(soon, (d) => d.amt))} MRR riding on ${soon.length === 1 ? "it" : "them"}.`,
+      module: "deals",
+    });
+  }
+  return out;
+}
+
+function briefingAlerts() {
+  const calls = WEEK_PROSPECTS?.[TODAY_ISO]?.length ?? 0;
+  const other = WEEK_OTHER_EVENTS?.[TODAY_ISO]?.length ?? 0;
+  if (!calls && !other) return [];
   const parts = [];
-  if (calls) parts.push(`${calls} discovery call${calls === 1 ? "" : "s"}`);
-  if (other) parts.push(`${other} other event${other === 1 ? "" : "s"}`);
-  return `${parts.join(" · ")} today`;
+  if (calls) parts.push(plural(calls, "discovery call"));
+  if (other) parts.push(plural(other, "other block"));
+  return [{
+    id: "briefing-today",
+    level: calls ? "warn" : "idle",
+    title: calls ? `${plural(calls, "discovery call")} today` : "Calendar is booked today",
+    detail: `${parts.join(" and ")} on the calendar. Briefs are written.`,
+    module: "briefing",
+  }];
 }
 
-export default function DashboardModule({ onNavigate }) {
-  const today = useMemo(() => formatToday(), []);
-  const hello = useMemo(() => greeting(), []);
-  const tiles = useMemo(
-    () => TILES.map((t) => (t.id === "briefing" ? { ...t, signal: todaySignal() } : t)),
-    [],
-  );
-
-  return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#08090f",
-      backgroundImage: [
-        "radial-gradient(900px 600px at 0% 0%, rgba(220,38,38,0.10), transparent 60%)",
-        "radial-gradient(900px 700px at 100% 100%, rgba(50,83,220,0.12), transparent 60%)",
-        "radial-gradient(1200px 800px at 50% 50%, rgba(77,130,255,0.04), transparent 70%)",
-      ].join(", "),
-      color: C.text,
-      fontFamily: FONT_SANS,
-      padding: "44px 36px 72px 36px",
-      position: "relative",
-      overflow: "hidden",
-    }}>
-      {/* faint star dots */}
-      <StarField />
-
-      {/* HERO */}
-      <div style={{ position: "relative", zIndex: 1, marginBottom: 56, maxWidth: 1280 }}>
-        <div style={{
-          fontFamily: FONT_MONO, fontSize: 11, letterSpacing: 2.5,
-          color: C.textHint, textTransform: "uppercase", marginBottom: 12,
-        }}>
-          {today} · Cockpit
-        </div>
-        <h1 style={{
-          fontFamily: FONT_DISPLAY,
-          fontSize: "clamp(34px, 4.2vw, 52px)", fontWeight: 600, lineHeight: 1.05, letterSpacing: -1.2,
-          margin: 0,
-          background: "linear-gradient(180deg, #ffffff 0%, #b8bcd1 100%)",
-          WebkitBackgroundClip: "text", backgroundClip: "text",
-          WebkitTextFillColor: "transparent",
-        }}>
-          {hello}, {OWNER.name.split(" ")[0]}.
-        </h1>
-        <div style={{
-          marginTop: 14, fontSize: 16, color: C.textMuted, maxWidth: 620, lineHeight: 1.5,
-        }}>
-          Your constellation - {TILES.length} {TILES.length === 1 ? "module" : "modules"}. Pick a star to dive in.
-        </div>
-      </div>
-
-      {/* GRID */}
-      <div style={{
-        position: "relative", zIndex: 1,
-        display: "grid",
-        gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-        gap: 14,
-        maxWidth: 1040,
-      }}>
-        {tiles.map((t, i) => (
-          <Tile key={t.id} tile={t} index={i} onNavigate={onNavigate} />
-        ))}
-      </div>
-
-      {/* footer */}
-      <div style={{
-        position: "relative", zIndex: 1,
-        marginTop: 56, maxWidth: 1280,
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-        fontFamily: FONT_MONO, fontSize: 10, color: C.textHint, letterSpacing: 1.4,
-      }}>
-        <span>CLOUDTALK · SE EMEA · COCKPIT v0.4</span>
-        <span>⌘K  PALETTE   ·   ⌘B  RAIL</span>
-      </div>
-    </div>
-  );
+// Points pace. The quota is a month-long line; being behind on day 4 of 31 is
+// noise, so this only fires once enough of the month has elapsed for the gap to
+// mean something.
+function pacePctAlerts() {
+  const p = PERFORMANCE?.pacing;
+  if (!p?.target || !p?.daysInMonth) return [];
+  const elapsed = p.dayOfMonth / p.daysInMonth;
+  if (elapsed < 0.2) return [];
+  const expected = p.target * elapsed;
+  if (!expected) return [];
+  const ratio = (p.earned ?? 0) / expected;
+  if (ratio >= 0.85) return [];
+  const short = Math.ceil(expected - (p.earned ?? 0));
+  return [{
+    id: "perf-pace",
+    level: ratio < 0.6 ? "risk" : "warn",
+    title: `${short} point${short === 1 ? "" : "s"} behind quota pace`,
+    detail: `${p.earned} of ${p.target} earned on day ${p.dayOfMonth} of ${p.daysInMonth}.`,
+    module: "performance",
+  }];
 }
 
-function Tile({ tile, index, onNavigate }) {
-  const accent = C[tile.accent] || C.blue;
-  const accentBorder = C[`${tile.accent}Border`] || C.blueBorder;
-  const isPrimary = !!tile.primary;
-  const isLive = !!tile.live;
+// Deals still pending from before this month. The Deals board only covers the
+// current month by design, so without this rule an August deal could sit
+// undecided forever with nothing on screen saying so.
+function olderPendingAlerts() {
+  const stalls = PERFORMANCE?.stalls ?? [];
+  const monthStart = DEALS?.monthStart ? new Date(DEALS.monthStart) : null;
+  if (!monthStart || isNaN(monthStart)) return [];
+  const old = stalls.filter((s) => s.createdate && new Date(s.createdate) < monthStart);
+  if (!old.length) return [];
+  return [{
+    id: "perf-old-pending",
+    level: "warn",
+    title: `${plural(old.length, "deal")} still pending from before ${DEALS.monthLabel}`,
+    detail: `${eur(sum(old, (d) => d.value))} MRR outside this month's board.`,
+    module: "performance",
+  }];
+}
 
-  const baseBorder = isPrimary
-    ? `1px solid ${accent}`
-    : isLive
-    ? `1px solid ${C.border}`
-    : `1px solid ${C.border}`;
+function selfServedAlerts() {
+  const n = typeof onboardingAlertCount === "function" ? onboardingAlertCount() : 0;
+  const eligible = SELFSERVED?.funnel?.eligible ?? 0;
+  const out = [];
+  if (n) {
+    out.push({
+      id: "ss-onboarding",
+      level: "warn",
+      title: `${plural(n, "self-served account")} inside the onboarding window`,
+      detail: "Active, paying, no deal attached. Reach out while they are still new.",
+      module: "selfserved",
+    });
+  } else if (eligible) {
+    out.push({
+      id: "ss-eligible",
+      level: "idle",
+      title: `${plural(eligible, "re-engage candidate")} queued`,
+      detail: "Qualified, untouched, no open deal.",
+      module: "selfserved",
+    });
+  }
+  return out;
+}
 
-  const baseShadow = isPrimary
-    ? `0 0 0 1px ${accent} inset, 0 0 40px ${accent}33, 0 18px 40px rgba(0,0,0,0.45)`
-    : "0 1px 0 0 rgba(255,255,255,0.03) inset, 0 8px 22px rgba(0,0,0,0.35)";
+// Own row on the team board. Team-wide numbers are the Pacing module's business;
+// the dashboard only cares when it is your own line that is behind.
+function pacingAlerts() {
+  const me = (PACING?.roster ?? []).find((r) => r.id === PERFORMANCE?.ownerId);
+  const act = PACING?.actuals?.[PERFORMANCE?.ownerId];
+  if (!me || !act || !me.sqo || !me.cal?.total) return [];
+  const elapsed = me.cal.elapsed / me.cal.total;
+  if (elapsed < 0.2) return [];
+  const ratio = (act.sqoMrr ?? 0) / (me.sqo * elapsed);
+  if (ratio >= 0.85) return [];
+  return [{
+    id: "pacing-self",
+    level: ratio < 0.6 ? "risk" : "warn",
+    title: `SQO pacing at ${Math.round(ratio * 100)}% of where it should be`,
+    detail: `${eur(act.sqoMrr)} of a ${eur(me.sqo)} month, ${me.cal.left} working day${me.cal.left === 1 ? "" : "s"} left.`,
+    module: "pacing",
+  }];
+}
 
-  const hoverShadow = isLive
-    ? `0 0 0 1px ${accent} inset, 0 0 28px ${accent}33, 0 22px 48px rgba(0,0,0,0.5)`
-    : baseShadow;
+function buildAlerts() {
+  return [
+    ...dealAlerts(),
+    ...pacePctAlerts(),
+    ...olderPendingAlerts(),
+    ...pacingAlerts(),
+    ...briefingAlerts(),
+    ...selfServedAlerts(),
+  ].sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level]);
+}
 
+// ---------------------------------------------------------------------------
+// pieces
+// ---------------------------------------------------------------------------
+
+function LadderItem({ alert, rank, onNavigate }) {
+  const s = SEMANTIC[alert.level];
+  const mod = TILE_MODULES.find((m) => m.id === alert.module);
   return (
-    <motion.button
-      onClick={() => isLive && onNavigate && onNavigate(tile.id)}
-      disabled={!isLive}
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: isLive ? 1 : 0.45, y: 0 }}
-      transition={{ delay: index * 0.035, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      whileHover={isLive ? { y: -4, scale: 1.012 } : {}}
-      whileTap={isLive ? { scale: 0.985 } : {}}
+    <button
+      onClick={() => onNavigate?.(alert.module)}
       style={{
-        position: "relative",
-        textAlign: "left",
-        background: isPrimary
-          ? `linear-gradient(180deg, ${accent}14 0%, ${C.surface} 60%)`
-          : "linear-gradient(180deg, #11131c 0%, #0c0e15 100%)",
-        border: baseBorder,
-        borderRadius: 16,
-        padding: "18px 18px 16px 18px",
-        minHeight: 152,
-        cursor: isLive ? "pointer" : "not-allowed",
-        color: C.text,
-        fontFamily: FONT_SANS,
-        boxShadow: baseShadow,
-        overflow: "hidden",
-        outline: "none",
+        display: "flex", alignItems: "flex-start", gap: 14,
+        width: "100%", textAlign: "left", cursor: "pointer",
+        background: `linear-gradient(135deg, ${s.bg}, transparent 70%)`,
+        border: `1px solid ${s.border}`,
+        borderRadius: R.lg,
+        padding: "15px 16px",
+        color: C.text, font: `400 ${T.body}px/1.4 ${FONT_SANS}`,
+        transition: "border-color 120ms ease",
       }}
-      onMouseEnter={(e) => { if (isLive) e.currentTarget.style.boxShadow = hoverShadow; }}
-      onMouseLeave={(e) => { e.currentTarget.style.boxShadow = baseShadow; }}
+      onMouseEnter={(e) => { e.currentTarget.style.borderColor = s.fill; }}
+      onMouseLeave={(e) => { e.currentTarget.style.borderColor = s.border; }}
     >
-      {/* corner glow flare for the primary tile */}
-      {isPrimary && (
-        <div style={{
-          position: "absolute", top: -40, right: -40, width: 140, height: 140,
-          background: `radial-gradient(circle, ${accent}55, transparent 65%)`,
-          pointerEvents: "none",
-        }} />
-      )}
-
-      {/* head row: num + status pill */}
-      <div style={{
-        display: "flex", justifyContent: "space-between", alignItems: "center",
-        marginBottom: 18,
+      <span style={{
+        font: `500 ${T.label}px/1 ${FONT_MONO}`, color: s.fill,
+        paddingTop: 3, letterSpacing: TRACK.label, flex: "none",
       }}>
+        {String(rank).padStart(2, "0")}
+      </span>
+      <span style={{ minWidth: 0, flex: 1 }}>
         <span style={{
-          fontFamily: FONT_MONO, fontSize: 10, letterSpacing: 1.5,
-          color: isPrimary ? accent : C.textHint,
+          display: "block",
+          font: `500 ${T.bodyLg}px/1.3 ${FONT_SANS}`,
+          letterSpacing: TRACK.tight, color: C.text,
         }}>
+          {alert.title}
+        </span>
+        <span style={{ display: "block", color: C.textMuted, marginTop: 5, font: `400 ${T.micro + 1}px/1.45 ${FONT_SANS}` }}>
+          {alert.detail}
+        </span>
+      </span>
+      <span style={{
+        font: `400 ${T.label}px/1 ${FONT_SANS}`, color: C.textFaint,
+        letterSpacing: TRACK.label, textTransform: "uppercase",
+        paddingTop: 4, whiteSpace: "nowrap", flex: "none",
+      }}>
+        {mod ? `${mod.num} ${mod.label}` : alert.module} →
+      </span>
+    </button>
+  );
+}
+
+function Tile({ tile, onNavigate }) {
+  const accent = C[tile.accent] || C.blue;
+  return (
+    <button
+      onClick={() => onNavigate?.(tile.id)}
+      style={{
+        textAlign: "left", cursor: "pointer",
+        background: C.cardBg,
+        border: `1px solid ${C.border}`,
+        borderRadius: R.lg,
+        padding: 16,
+        color: C.text, fontFamily: FONT_SANS,
+        display: "flex", flexDirection: "column", gap: 12,
+        transition: "background 120ms ease, border-color 120ms ease",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = C.cardBgHover;
+        e.currentTarget.style.borderColor = `${accent}4D`;
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = C.cardBg;
+        e.currentTarget.style.borderColor = C.border;
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{
+          width: 32, height: 32, borderRadius: R.md,
+          background: `linear-gradient(135deg, ${accent}2E, ${accent}12)`,
+          border: `1px solid ${accent}3D`,
+          color: accent,
+          display: "flex", alignItems: "center", justifyContent: "center", flex: "none",
+        }}>
+          {Icon[tile.id]}
+        </span>
+        <span style={{ minWidth: 0, flex: 1 }}>
+          <span style={{
+            display: "block", font: `500 ${T.body}px/1.2 ${FONT_SANS}`,
+            letterSpacing: TRACK.tight, color: C.text,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
+            {tile.label}
+          </span>
+          <span style={{
+            display: "block", font: `400 ${T.label}px/1 ${FONT_SANS}`,
+            letterSpacing: TRACK.label, textTransform: "uppercase",
+            color: C.textFaint, marginTop: 5,
+          }}>
+            {tile.sub}
+          </span>
+        </span>
+        <span style={{ font: `400 ${T.label}px/1 ${FONT_MONO}`, color: C.textFaint, flex: "none" }}>
           {tile.num}
         </span>
-        {isLive ? (
-          <span style={{
-            display: "inline-flex", alignItems: "center", gap: 6,
-            fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 1, color: C.textHint,
-          }}>
-            <motion.span
-              animate={isPrimary ? { opacity: [0.5, 1, 0.5] } : {}}
-              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-              style={{
-                width: 6, height: 6, borderRadius: "50%",
-                background: accent, boxShadow: `0 0 8px ${accent}`,
-              }}
-            />
-            LIVE
-          </span>
-        ) : (
-          <span style={{
-            fontFamily: FONT_MONO, fontSize: 9, letterSpacing: 1,
-            color: C.amber, background: C.amberBg,
-            border: `1px solid ${C.amberBorder}`,
-            padding: "2px 6px", borderRadius: 3,
-          }}>
-            SOON
-          </span>
-        )}
       </div>
-
-      {/* icon */}
-      <div style={{
-        color: isPrimary ? accent : isLive ? C.textMid : C.textHint,
-        marginBottom: 14,
-      }}>
-        {tile.icon}
-      </div>
-
-      {/* name */}
-      <div style={{
-        fontFamily: FONT_DISPLAY, fontSize: 16, fontWeight: 500,
-        letterSpacing: -0.2, color: isLive ? C.text : C.textMuted,
-        marginBottom: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-      }}>
-        {tile.label}
-      </div>
-
-      {/* sub */}
-      <div style={{
-        fontFamily: FONT_MONO, fontSize: 10, letterSpacing: 0.8,
-        color: C.textHint, marginBottom: 14, textTransform: "uppercase",
-      }}>
-        {tile.sub}
-      </div>
-
-      {/* signal */}
-      {isLive && tile.signal && (
+      {tile.signal && (
         <div style={{
-          fontSize: 12, color: isPrimary ? C.text : C.textMuted,
-          borderTop: `1px solid ${isPrimary ? accent + "33" : C.border}`,
-          paddingTop: 10,
+          font: `400 ${T.micro}px/1.4 ${FONT_SANS}`, color: C.textMuted,
+          borderTop: `1px solid ${C.divider}`, paddingTop: 11,
         }}>
           {tile.signal}
         </div>
       )}
-    </motion.button>
+    </button>
   );
 }
 
-// Faint star dots scattered across the canvas. Pure decoration, no interaction.
-function StarField() {
-  const stars = useMemo(() => {
-    // Deterministic pseudo-random so the layout is stable between renders.
-    const seed = 7;
-    const out = [];
-    let s = seed;
-    const rand = () => {
-      s = (s * 9301 + 49297) % 233280;
-      return s / 233280;
-    };
-    for (let i = 0; i < 42; i++) {
-      out.push({
-        top: rand() * 100,
-        left: rand() * 100,
-        size: rand() < 0.85 ? 1 : 2,
-        opacity: 0.15 + rand() * 0.35,
-      });
-    }
-    return out;
-  }, []);
+// ---------------------------------------------------------------------------
+// Module
+// ---------------------------------------------------------------------------
+
+export default function DashboardModule({ onNavigate }) {
+  const alerts = useMemo(buildAlerts, []);
+  const top = alerts.slice(0, 3);
+  const rest = alerts.slice(3);
+
+  const today = useMemo(
+    () => new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" }),
+    [],
+  );
+
+  const callsToday = WEEK_PROSPECTS?.[TODAY_ISO]?.length ?? 0;
+  const pacing = PERFORMANCE?.pacing ?? {};
+  const acceptedAmt = sum((DEALS?.deals ?? []).filter((d) => d.outcome === "accepted"), (d) => d.amt);
+
+  // The Today tile's signal is derived live rather than carried in the registry,
+  // so it can never disagree with what module 02 actually shows.
+  const tiles = useMemo(() => TILE_MODULES.map((m) => {
+    if (m.id !== "briefing") return m;
+    const other = WEEK_OTHER_EVENTS?.[TODAY_ISO]?.length ?? 0;
+    const bits = [];
+    if (callsToday) bits.push(plural(callsToday, "discovery call"));
+    if (other) bits.push(plural(other, "other event"));
+    return { ...m, signal: bits.length ? `${bits.join(" · ")} today` : "Nothing on the calendar today" };
+  }), [callsToday]);
+
   return (
-    <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0 }}>
-      {stars.map((st, i) => (
-        <div key={i} style={{
-          position: "absolute",
-          top: `${st.top}%`, left: `${st.left}%`,
-          width: st.size, height: st.size, borderRadius: "50%",
-          background: "#cfd3e6", opacity: st.opacity,
-        }} />
-      ))}
-    </div>
+    <Page>
+      <div style={{ marginBottom: 28 }}>
+        <SectionLabel>{today}</SectionLabel>
+        <h1 style={{
+          font: `600 34px/1.1 ${FONT_SANS}`,
+          letterSpacing: TRACK.tightest, color: C.text,
+          margin: "12px 0 0",
+        }}>
+          {greeting()}, {OWNER.name.split(" ")[0]}.
+        </h1>
+      </div>
+
+      <StatRow>
+        <Stat label="Calls today" value={callsToday} size="sm" note={callsToday ? "briefs written" : "clear calendar"} />
+        <Stat label="Points MTD" value={pacing.earned ?? 0} of={pacing.target ?? "-"} size="sm"
+              note={`day ${pacing.dayOfMonth ?? "-"} of ${pacing.daysInMonth ?? "-"}`} />
+        <Stat label="Accepted MRR" value={eur(acceptedAmt)} size="sm" note={DEALS?.monthLabel ?? ""} />
+        <Stat label="Re-engage queue" value={SELFSERVED?.funnel?.eligible ?? 0} size="sm" note="qualified, untouched" />
+      </StatRow>
+
+      <div style={{ marginTop: 30 }}>
+        <SectionLabel>Needs you</SectionLabel>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12 }}>
+          {top.length === 0 ? (
+            <Empty>Nothing is breaching, behind or unanswered. Go sell.</Empty>
+          ) : (
+            top.map((a, i) => (
+              <LadderItem key={a.id} alert={a} rank={i + 1} onNavigate={onNavigate} />
+            ))
+          )}
+        </div>
+
+        {rest.length > 0 && (
+          <div style={{ marginTop: 20 }}>
+            <SectionLabel>Also running</SectionLabel>
+            <DataList style={{ marginTop: 8 }}>
+              {rest.map((a, i) => {
+                const mod = TILE_MODULES.find((m) => m.id === a.module);
+                return (
+                  <DataRow key={a.id} last={i === rest.length - 1} onClick={() => onNavigate?.(a.module)}>
+                    <StatusDot level={a.level} />
+                    <span style={{
+                      flex: 1, minWidth: 0,
+                      font: `400 ${T.body}px/1.3 ${FONT_SANS}`, color: C.textMid,
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>
+                      {a.title}
+                    </span>
+                    <span style={{
+                      font: `400 ${T.label}px/1 ${FONT_SANS}`, color: C.textFaint,
+                      letterSpacing: TRACK.label, textTransform: "uppercase", whiteSpace: "nowrap",
+                    }}>
+                      {mod ? `${mod.num} ${mod.label}` : a.module}
+                    </span>
+                  </DataRow>
+                );
+              })}
+            </DataList>
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 34 }}>
+        <SectionLabel>Modules</SectionLabel>
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fill, minmax(216px, 1fr))",
+          gap: 12, marginTop: 12,
+        }}>
+          {tiles.map((t) => <Tile key={t.id} tile={t} onNavigate={onNavigate} />)}
+        </div>
+      </div>
+
+      <div style={{
+        marginTop: 40, paddingTop: 16, borderTop: `1px solid ${C.divider}`,
+        display: "flex", justifyContent: "space-between",
+        font: `400 ${T.label}px/1 ${FONT_MONO}`, color: C.textFaint,
+        letterSpacing: TRACK.label,
+      }}>
+        <span>CLOUDTALK · SE EMEA</span>
+        <span>⌘K PALETTE · ⌘B RAIL</span>
+      </div>
+    </Page>
   );
 }

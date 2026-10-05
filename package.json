@@ -7,14 +7,12 @@
     "postinstall": "node scripts/seed-data.mjs",
     "seed": "node scripts/seed-data.mjs",
     "make-seeds": "node scripts/make-seeds.mjs",
-    "dev": "concurrently \"vite\" \"node src/server/coach.mjs\"",
-    "dev:ui": "vite",
+    "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.128.0",
     "framer-motion": "^11.18.2",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"

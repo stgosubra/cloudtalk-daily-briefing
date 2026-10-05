@@ -1,43 +1,39 @@
-import { useState, createContext, useContext } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { SELFSERVED, isOnboardingAlert, ONBOARD_MIN_DAYS, ONBOARD_MAX_DAYS } from "./data.js";
+// Module 05 - Self-Served.
+//
+// Contacts who activated a CloudTalk account on their own and are not being
+// worked. The module's job is to order them by how perishable the opening is,
+// not by how big the logo looks - so activation recency leads and the composite
+// quality score only breaks ties.
+//
+// The funnel strip above the list is the audit trail. Every number that was
+// filtered out is shown and named, because a cohort you cannot reconstruct is a
+// cohort nobody trusts.
 
-// ─── Present mode: mask PII (email / phone) for screen-share ──────────────────
+import { useState, createContext, useContext, useMemo } from "react";
+import { SELFSERVED, isOnboardingAlert, ONBOARD_MIN_DAYS, ONBOARD_MAX_DAYS, GENERATED_AT } from "./data.js";
+import {
+  Page, PageHeader, Card, SectionLabel, Stat, StatRow, StatusDot, Badge,
+  Glyph, DataList, DataRow, TabBar, ProgressBar, Empty,
+} from "../../design/ui.jsx";
+import { C, R, T, TRACK, NUM, SEMANTIC, FONT_SANS, FONT_MONO } from "../../lib/tokens.js";
+
+// Present mode masks email and phone so the module can go on a shared screen
+// without redacting by hand. Context rather than a prop because the mask applies
+// to leaf cells several levels down.
 const MaskCtx = createContext(false);
 const useMasked = () => useContext(MaskCtx);
 const MASK = "•••••••";
 
-// ─── Design tokens (mirrors performance module family) ───────────────────────
-const C = {
-  bg: "#060810",
-  surf: "rgba(120,160,255,0.04)",
-  surf2: "rgba(120,160,255,0.07)",
-  line: "rgba(80,130,255,0.12)",
-  line2: "rgba(80,130,255,0.28)",
-  blue: "#4d82ff",
-  txt: "#dde6ff",
-  mut: "rgba(180,205,255,0.55)",
-  faint: "rgba(180,205,255,0.3)",
-  green: "#47cd89",
-  amber: "#f5a623",
-  purple: "#3253DC",
-  red: "#f97066",
-  teal: "#2dd4bf",
-};
-const FONT = "ui-sans-serif, system-ui, -apple-system, sans-serif";
-const MONO = "'JetBrains Mono', ui-monospace, Menlo, monospace";
+const TIER_LEVEL = { T1: "ok", T2: "warn", T3: "idle" };
 
-const CARD_SHADOW = "0 1px 0 0 rgba(255,255,255,0.03) inset, 0 0 0 1px rgba(255,255,255,0.04) inset, 0 0 0 1px rgba(0,0,0,0.18), 0 2px 2px rgba(0,0,0,0.12), 0 4px 4px rgba(0,0,0,0.1), 0 8px 8px rgba(0,0,0,0.08)";
-
-const TIER_COLOR = { T1: C.green, T2: C.amber, T3: C.faint };
 const FLAG = {
   australia: "🇦🇺", sweden: "🇸🇪", spain: "🇪🇸", france: "🇫🇷", germany: "🇩🇪",
   netherlands: "🇳🇱", norway: "🇳🇴", romania: "🇷🇴", portugal: "🇵🇹", pakistan: "🇵🇰",
   cameroon: "🇨🇲", cyprus: "🇨🇾", italy: "🇮🇹", nigeria: "🇳🇬", "united kingdom": "🇬🇧",
   poland: "🇵🇱", ireland: "🇮🇪",
 };
+const flagOf = (c) => FLAG[(c || "").toLowerCase()] || "🏳";
 
-// days between an ISO date and the snapshot "today"
 function daysAgo(iso, today) {
   if (!iso) return null;
   const a = new Date(iso.includes("T") ? iso : iso + "T00:00:00Z");
@@ -45,379 +41,466 @@ function daysAgo(iso, today) {
   return Math.round((b - a) / 86400000);
 }
 
-// Onboarding alert: a self-served account whose activation is fresh but past first-touch
-// (older than 3 days, younger than 30) is a churn risk and an upsell opening - flag it.
-// Rule lives in data.js so the shell nav badge fires off the exact same predicate.
-function needsOnboarding(item, today) {
-  return isOnboardingAlert(item, today);
-}
+const RECENCY_OPTS = [14, 30, 60, 90];
 
-function TierChip({ label, tier }) {
-  const c = TIER_COLOR[tier] || C.faint;
-  return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: 5,
-      fontFamily: MONO, fontSize: 10, color: c,
-      background: "rgba(255,255,255,0.03)", border: `1px solid ${c}33`,
-      borderRadius: 6, padding: "3px 8px",
-    }}>
-      <span style={{ color: C.faint }}>{label}</span>
-      <span style={{ fontWeight: 600 }}>{tier}</span>
-    </span>
-  );
-}
-
-// ─── Funnel strip - how 20 active narrowed to the eligible cohort ────────────
-function FunnelStrip({ f }) {
+// ---------------------------------------------------------------------------
+// Funnel - how the active cohort narrowed to the eligible one
+// ---------------------------------------------------------------------------
+// A row of numbers with arrows between them was readable but gave every step the
+// same weight. This gives each step a bar proportional to the one before it, so
+// the size of each drop is visible rather than something you compute in your head.
+function Funnel({ f }) {
   const steps = [
-    { n: f.activeInWindow, label: "active in window", c: C.blue },
-    { n: f.qualified, label: "already qualified", c: C.faint },
-    { n: f.nonQualified, label: "non-qualified", c: C.amber },
-    { n: f.disqualifiedByDeal, label: "won deal", c: C.red },
-    { n: f.eligible, label: "eligible", c: C.green },
+    { n: f.activeInWindow, label: "Active in window", note: "self-served accounts that went live", level: "idle" },
+    { n: f.qualified, label: "Already qualified", note: "actively worked - out of this play", level: "idle" },
+    { n: f.nonQualified, label: "Not qualified", note: "the pool this module draws from", level: "warn" },
+    { n: f.disqualifiedByDeal, label: "Has a won deal", note: "removed - already a customer motion", level: "risk" },
+    { n: f.eligible, label: "Eligible", note: "no open or won deal anywhere on the record", level: "ok" },
   ];
+  const top = Math.max(...steps.map((s) => s.n), 1);
+
   return (
-    <div style={{
-      display: "flex", alignItems: "stretch", gap: 0, flexWrap: "wrap",
-      background: C.surf, border: `1px solid ${C.line}`, borderRadius: 14,
-      padding: "4px", marginBottom: 24, boxShadow: CARD_SHADOW,
-    }}>
-      {steps.map((s, i) => (
-        <div key={s.label} style={{ display: "flex", alignItems: "center", flex: "1 1 auto" }}>
-          <div style={{ padding: "12px 18px", textAlign: "center", flex: 1 }}>
-            <div style={{ fontSize: 22, fontWeight: 700, color: s.c, fontFamily: FONT, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>
+    <Card title="How the cohort narrowed" right={<SectionLabel>{f.eligible} eligible</SectionLabel>}>
+      <DataList>
+        {steps.map((s, i) => (
+          <DataRow key={s.label} last={i === steps.length - 1}>
+            <div style={{
+              width: 48, textAlign: "right", flex: "none",
+              font: `600 ${T.bodyLg}px/1 ${FONT_SANS}`,
+              color: SEMANTIC[s.level].fill, ...NUM,
+            }}>
               {s.n}
             </div>
-            <div style={{ fontSize: 9.5, color: C.faint, fontFamily: MONO, marginTop: 5, letterSpacing: 0.3 }}>
-              {s.label}
+            <div style={{ width: 170, flex: "none" }}>
+              <div style={{ font: `500 ${T.body}px/1.2 ${FONT_SANS}`, color: C.text }}>{s.label}</div>
             </div>
-          </div>
-          {i < steps.length - 1 && (
-            <span style={{ color: C.faint, fontSize: 14, opacity: 0.5 }}>→</span>
-          )}
-        </div>
-      ))}
-    </div>
+            <div style={{ flex: 1, minWidth: 80 }}>
+              <ProgressBar pct={(s.n / top) * 100} level={s.level} />
+            </div>
+            <div style={{
+              width: 260, flex: "none", textAlign: "right",
+              font: `400 ${T.micro}px/1.3 ${FONT_SANS}`, color: C.textHint,
+            }}>
+              {s.note}
+            </div>
+          </DataRow>
+        ))}
+      </DataList>
+    </Card>
   );
 }
 
-// ─── Lead card ────────────────────────────────────────────────────────────
-function LeadCard({ item, today, rank }) {
+// ---------------------------------------------------------------------------
+// Lead row
+// ---------------------------------------------------------------------------
+// Expands in place rather than opening a panel. Collapsed, a row carries the
+// four things that decide whether to call: how fresh the activation is, how big
+// the account could be, where it is, and whether anyone has touched it. The rest
+// is detail you only want once you have decided.
+const LEAD_COLS = "40px minmax(200px, 1.5fr) 104px 128px 124px 90px";
+
+function LeadRow({ item, today, last, open, onToggle }) {
   const masked = useMasked();
   const active = daysAgo(item.account_became_active, today);
   const lastTouch = daysAgo(item.engagement.notes_last_contacted, today);
-  const flag = FLAG[(item.country || "").toLowerCase()] || "🏳";
-  const seatLabel = item.seats.seat_range || item.seats.seats_indicated__aggregated_ || "?";
+  const alert = isOnboardingAlert(item, today);
   const name = `${item.firstname} ${item.lastname}`.trim();
+  const seatLabel = item.seats.seat_range || item.seats.seats_indicated__aggregated_ || "?";
+
+  // Fresher activation is a hotter opening. Inside the onboarding window it is
+  // also time-boxed, which is why that case outranks plain recency.
+  const level = alert ? "risk" : active != null && active <= 14 ? "ok" : "idle";
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: rank * 0.04 }}
-      style={{
-        background: C.surf, border: `1px solid ${C.line}`, borderRadius: 16,
-        padding: 20, boxShadow: CARD_SHADOW, marginBottom: 14,
-      }}
-    >
-      {/* header row */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-          {/* rank score badge */}
-          <div style={{
-            width: 46, height: 46, borderRadius: 12, flexShrink: 0,
-            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-            background: "rgba(77,130,255,0.1)", border: `1px solid ${C.line2}`,
-          }}>
-            <span style={{ fontSize: 17, fontWeight: 700, color: C.blue, lineHeight: 1, fontVariantNumeric: "tabular-nums" }}>{item.rank_score}</span>
-            <span style={{ fontSize: 7.5, color: C.faint, fontFamily: MONO, letterSpacing: 0.5, marginTop: 2 }}>SCORE</span>
+    <>
+      <DataRow
+        last={last && !open}
+        onClick={onToggle}
+        style={{ display: "grid", gridTemplateColumns: LEAD_COLS, alignItems: "center", padding: "13px 8px" }}
+      >
+        <Glyph level={level} size={32}>{item.rank_score}</Glyph>
+
+        <div style={{ minWidth: 0, paddingRight: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+            <span style={{ fontSize: 13, flex: "none" }}>{flagOf(item.country)}</span>
+            <span style={{
+              font: `500 ${T.body}px/1.2 ${FONT_SANS}`, color: C.text,
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+            }}>
+              {name}
+            </span>
+            {item.closedLostFlag && <Badge level="warn" mono>RE-ENGAGE</Badge>}
           </div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 16, fontWeight: 600, color: C.txt }}>{flag} {name}</span>
-              {item.closedLostFlag && (
-                <span style={{ fontFamily: MONO, fontSize: 9, color: C.amber, background: "rgba(245,166,35,0.12)", border: `1px solid ${C.amber}44`, borderRadius: 4, padding: "1px 6px" }}>
-                  RE-ENGAGE
-                </span>
-              )}
-              {needsOnboarding(item, today) && (
-                <span style={{ fontFamily: MONO, fontSize: 9, color: C.red, background: "rgba(249,112,102,0.12)", border: `1px solid ${C.red}55`, borderRadius: 4, padding: "1px 6px", whiteSpace: "nowrap" }}>
-                  {active}D · ONBOARD + UPSELL
-                </span>
-              )}
-            </div>
-            <div style={{ fontSize: 12, color: C.mut, marginTop: 3 }}>
-              {item.company?.name || "-"}
-              {item.jobtitle ? ` · ${item.jobtitle}` : ""}
-              {item.company?.domain ? ` · ${item.company.domain}` : ""}
-            </div>
+          <div style={{
+            font: `400 ${T.micro}px/1.3 ${FONT_SANS}`, color: C.textHint, marginTop: 4,
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+          }}>
+            {item.company?.name || "-"}{item.jobtitle ? ` · ${item.jobtitle}` : ""}
           </div>
         </div>
-        <a href={item.hsLink} target="_blank" rel="noreferrer" style={{
-          flexShrink: 0, fontFamily: MONO, fontSize: 10.5, color: C.blue, textDecoration: "none",
-          border: `1px solid ${C.line2}`, borderRadius: 7, padding: "6px 10px", background: "rgba(77,130,255,0.06)",
+
+        <Cell
+          value={active != null ? `${active}d` : "-"}
+          note="since activation"
+          level={alert ? "risk" : active != null && active <= 14 ? "ok" : null}
+        />
+        <Cell value={seatLabel} note={`seats · ${item.seat_tier}`} />
+        <Cell
+          value={lastTouch != null ? `${lastTouch}d` : "never"}
+          note={`${item.engagement.num_contacted_notes} touch${item.engagement.num_contacted_notes === 1 ? "" : "es"}`}
+          level={lastTouch == null ? "warn" : null}
+        />
+
+        <div style={{ textAlign: "right" }}>
+          {alert ? (
+            <Badge level="risk" mono>ONBOARD</Badge>
+          ) : (
+            <span style={{ font: `400 ${T.micro}px/1 ${FONT_SANS}`, color: C.textFaint }}>
+              {open ? "close" : "details"}
+            </span>
+          )}
+        </div>
+      </DataRow>
+
+      {open && (
+        <div style={{
+          padding: "16px 8px 20px 56px",
+          borderBottom: last ? "none" : `1px solid ${C.divider}`,
+          display: "flex", flexDirection: "column", gap: 16,
         }}>
-          open in HubSpot →
-        </a>
-      </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Badge level={TIER_LEVEL[item.seat_tier]} mono>SEATS {seatLabel} · {item.seat_tier}</Badge>
+            <Badge level={TIER_LEVEL[item.geo_tier]} mono>{(item.country || "?").toUpperCase()} · {item.geo_tier}</Badge>
+            <Badge level={TIER_LEVEL[item.source_tier]} mono>{(item.lead_source || "?").toUpperCase()} · {item.source_tier}</Badge>
+          </div>
 
-      {/* tier chips */}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 14 }}>
-        <TierChip label={`seats ${seatLabel}`} tier={item.seat_tier} />
-        <TierChip label={item.country} tier={item.geo_tier} />
-        <TierChip label={item.lead_source} tier={item.source_tier} />
-      </div>
+          <div style={{
+            display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 18,
+          }}>
+            <Detail label="Activated" value={item.account_became_active || "-"} sub={active != null ? `${active} days ago` : null} />
+            <Detail label="Trial" value={item.active_trial ? "Active" : "-"} sub={item.ct_account_status} />
+            <Detail label="Lead status" value={item.hs_lead_status_label || item.hs_lead_status} sub={item.lifecyclestage} />
+            <Detail label="Domain" value={item.company?.domain || "-"} />
+            <Detail label="Email" value={masked ? MASK : item.email} mono />
+            <Detail label="Phone" value={masked ? MASK : item.phone} mono />
+          </div>
 
-      {/* signal grid */}
-      <div style={{
-        display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12,
-        marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.line}`,
-      }}>
-        <Signal label="ACTIVATED" value={active != null ? `${active}d ago` : "-"} sub={item.account_became_active} accent={active != null && active <= 7 ? C.green : null} />
-        <Signal label="TRIAL" value={item.active_trial ? "Active" : "-"} sub={item.ct_account_status} />
-        <Signal label="LAST TOUCH" value={lastTouch != null ? `${lastTouch}d ago` : "never"} sub={`${item.engagement.num_contacted_notes} touches`} />
-        <Signal label="STATUS" value={item.hs_lead_status_label || item.hs_lead_status} sub={item.lifecyclestage} />
-      </div>
+          {item.hygieneFlag && (
+            <div style={{
+              font: `400 ${T.micro}px/1.5 ${FONT_SANS}`, color: SEMANTIC.warn.fill,
+              background: SEMANTIC.warn.bg, border: `1px solid ${SEMANTIC.warn.border}`,
+              borderRadius: R.sm, padding: "9px 12px",
+            }}>
+              {item.hygieneFlag}
+            </div>
+          )}
 
-      {/* contact line (PII-masked under present mode) */}
-      <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 14, fontSize: 11.5, color: C.mut, fontFamily: MONO }}>
-        <span>✉ {masked ? MASK : item.email}</span>
-        <span>☎ {masked ? MASK : item.phone}</span>
-      </div>
-
-      {/* hygiene flag */}
-      {item.hygieneFlag && (
-        <div style={{ marginTop: 12, fontSize: 11, color: C.amber, background: "rgba(245,166,35,0.08)", border: `1px solid ${C.amber}33`, borderRadius: 8, padding: "8px 12px", lineHeight: 1.4 }}>
-          ⚠ {item.hygieneFlag}
+          <a
+            href={item.hsLink}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              alignSelf: "flex-start",
+              font: `400 ${T.micro}px/1 ${FONT_MONO}`, color: C.emerald,
+              textDecoration: "none", padding: "7px 11px", borderRadius: R.sm,
+              background: C.emeraldBg, border: `1px solid ${C.emeraldBorder}`,
+            }}
+          >
+            open in HubSpot →
+          </a>
         </div>
       )}
-    </motion.div>
+    </>
   );
 }
 
-function Signal({ label, value, sub, accent }) {
+function Cell({ value, note, level }) {
   return (
-    <div>
-      <div style={{ fontSize: 9, color: C.faint, fontFamily: MONO, letterSpacing: 0.6 }}>{label}</div>
-      <div style={{ fontSize: 14, fontWeight: 600, color: accent || C.txt, marginTop: 3 }}>{value}</div>
-      {sub && <div style={{ fontSize: 10, color: C.faint, marginTop: 1 }}>{sub}</div>}
+    <div style={{ paddingRight: 12 }}>
+      <div style={{
+        font: `500 ${T.body}px/1.2 ${FONT_SANS}`,
+        color: level ? SEMANTIC[level].fill : C.text, ...NUM,
+      }}>
+        {value}
+      </div>
+      {note && (
+        <div style={{ font: `400 ${T.label}px/1.3 ${FONT_SANS}`, color: C.textFaint, marginTop: 4 }}>
+          {note}
+        </div>
+      )}
     </div>
   );
 }
 
-function PresentToggle({ on, set }) {
+function Detail({ label, value, sub, mono }) {
   return (
-    <button
-      onClick={() => set(!on)}
-      title={on ? "PII hidden for screen-share" : "Hide email & phone for screen-share"}
-      style={{
-        display: "inline-flex", alignItems: "center", gap: 7, flexShrink: 0,
-        padding: "7px 12px", borderRadius: 9, cursor: "pointer", fontFamily: FONT,
-        fontSize: 12, fontWeight: 600,
-        background: on ? "rgba(245,166,35,0.14)" : "rgba(255,255,255,0.04)",
-        border: `1px solid ${on ? "rgba(245,166,35,0.4)" : "rgba(255,255,255,0.08)"}`,
-        color: on ? C.amber : C.mut, transition: "all 0.15s",
-      }}
-    >
-      {on ? "PII hidden" : "Present mode"}
-    </button>
+    <div style={{ minWidth: 0 }}>
+      <SectionLabel>{label}</SectionLabel>
+      <div style={{
+        font: `400 ${T.micro + 1}px/1.3 ${mono ? FONT_MONO : FONT_SANS}`,
+        color: C.textMid, marginTop: 6, wordBreak: "break-word",
+      }}>
+        {value || "-"}
+      </div>
+      {sub && (
+        <div style={{ font: `400 ${T.label}px/1.3 ${FONT_SANS}`, color: C.textFaint, marginTop: 3 }}>
+          {sub}
+        </div>
+      )}
+    </div>
   );
 }
 
-// ─── Not-eligible audit - won-deal contacts + qualified count ────────────────
-function NotEligible({ ne, today, maxDays = 90 }) {
-  const flagOf = (c) => FLAG[(c || "").toLowerCase()] || "🏳";
+// ---------------------------------------------------------------------------
+// Excluded tab - the audit trail
+// ---------------------------------------------------------------------------
+function ExcludedTab({ ne, today, maxDays }) {
   const wonDeal = ne.wonDeal.filter((x) => {
     const a = daysAgo(x.account_became_active, today);
     return a != null && a <= maxDays;
   });
-  return (
-    <div style={{ marginTop: 28 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
-        <span style={{ fontSize: 10, color: C.faint, fontFamily: MONO, letterSpacing: 0.8 }}>
-          NOT ELIGIBLE{maxDays < 90 ? ` · ACTIVATED ≤${maxDays}D` : " THIS WINDOW"}
-        </span>
-        <span style={{ flex: 1, height: 1, background: C.line }} />
-        <span style={{ fontSize: 10, color: C.faint, fontFamily: MONO }}>
-          {maxDays < 90 ? `${wonDeal.length} won-deal` : `${ne.qualifiedCount + ne.wonDeal.length} contacts`}
-        </span>
-      </div>
 
-      {/* qualified - summarised, not listed (no per-contact activation date stored, so hidden when recency-filtered) */}
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {maxDays >= 90 && (
-        <div style={{
-          display: "flex", alignItems: "center", gap: 14,
-          background: C.surf, border: `1px solid ${C.line}`, borderRadius: 12,
-          padding: "14px 18px", marginBottom: 14,
-        }}>
-          <div style={{ fontSize: 26, fontWeight: 700, color: C.faint, fontFamily: FONT, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>
-            {ne.qualifiedCount}
+        <Card title="Already qualified" right={<SectionLabel>{ne.qualifiedCount} contacts</SectionLabel>}>
+          <div style={{ font: `400 ${T.micro + 1}px/1.6 ${FONT_SANS}`, color: C.textMuted, maxWidth: "72ch" }}>
+            Being actively worked, so by definition out of the self-serve play. They
+            are not listed individually because there is nothing to action here - the
+            count exists so the funnel above reconciles.
           </div>
-          <div style={{ fontSize: 12, color: C.mut, lineHeight: 1.5 }}>
-            <span style={{ color: C.txt, fontWeight: 600 }}>already Qualified</span> — actively worked, out of the self-serve play. Not self-serve actionable by definition.
-          </div>
-        </div>
+        </Card>
       )}
 
-      {/* won-deal contacts - itemised so the filter is auditable */}
-      {wonDeal.length === 0 ? (
-        <div style={{ fontSize: 12, color: C.faint, fontFamily: MONO, padding: "4px 2px" }}>
-          No won-deal contacts activated within {maxDays} days.
-        </div>
-      ) : (
-      <div style={{ background: C.surf, border: `1px solid ${C.line}`, borderRadius: 12, padding: "6px 18px" }}>
-        {wonDeal.map((x, i) => {
-          const active = daysAgo(x.account_became_active, today);
-          return (
-            <div key={x.hsObjectId} style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
-              padding: "11px 0", borderTop: i === 0 ? "none" : `1px solid ${C.line}`,
-            }}>
-              <div style={{ minWidth: 0 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: C.txt }}>
-                  {flagOf(x.country)} {x.firstname} {x.lastname}
-                </span>
-                <span style={{ fontSize: 11, color: C.faint, marginLeft: 8, fontFamily: MONO }}>
-                  active {active != null ? `${active}d ago` : "-"}
-                </span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                <span style={{ fontFamily: MONO, fontSize: 10.5, color: C.green, background: "rgba(71,205,137,0.1)", border: `1px solid ${C.green}33`, borderRadius: 5, padding: "2px 7px" }}>
-                  WON
-                </span>
-                <span style={{ fontSize: 12, color: C.mut, fontVariantNumeric: "tabular-nums" }}>
-                  {x.deal.name} · €{x.deal.amount}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      )}
+      <Card
+        title="Removed for a won deal"
+        right={<SectionLabel>{wonDeal.length} within {maxDays}d</SectionLabel>}
+      >
+        {wonDeal.length === 0 ? (
+          <Empty level="ok">No won-deal contacts activated within {maxDays} days.</Empty>
+        ) : (
+          <DataList>
+            {wonDeal.map((x, i) => {
+              const active = daysAgo(x.account_became_active, today);
+              return (
+                <DataRow key={x.hsObjectId} last={i === wonDeal.length - 1}>
+                  <Glyph level="ok" size={30}>{flagOf(x.country)}</Glyph>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ font: `500 ${T.body}px/1.2 ${FONT_SANS}`, color: C.text }}>
+                      {x.firstname} {x.lastname}
+                    </div>
+                    <div style={{ font: `400 ${T.micro}px/1.3 ${FONT_SANS}`, color: C.textHint, marginTop: 4 }}>
+                      activated {active != null ? `${active}d ago` : "-"} · {x.deal.name}
+                    </div>
+                  </div>
+                  <div style={{
+                    font: `500 ${T.body}px/1 ${FONT_SANS}`, color: SEMANTIC.ok.fill, ...NUM,
+                  }}>
+                    €{x.deal.amount}
+                  </div>
+                </DataRow>
+              );
+            })}
+          </DataList>
+        )}
+      </Card>
     </div>
   );
 }
 
-// ─── Recency filter - narrow the cohort by activation date ───────────────────
-const RECENCY_OPTS = [14, 30, 60, 90];
-
-function RecencyFilter({ value, set, counts }) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
-      <span style={{ fontSize: 10, color: C.faint, fontFamily: MONO, letterSpacing: 0.6 }}>ACTIVATED WITHIN</span>
-      <div style={{ display: "inline-flex", gap: 6 }}>
-        {RECENCY_OPTS.map((opt) => {
-          const on = value === opt;
-          return (
-            <button key={opt} onClick={() => set(opt)} style={{
-              fontFamily: MONO, fontSize: 11, cursor: "pointer", transition: "all 0.15s",
-              padding: "5px 11px", borderRadius: 8,
-              background: on ? "rgba(77,130,255,0.14)" : "rgba(255,255,255,0.03)",
-              border: `1px solid ${on ? C.line2 : C.line}`,
-              color: on ? C.blue : C.mut, fontWeight: on ? 600 : 400,
-            }}>
-              {opt === 90 ? "all 90d" : `${opt}d`}
-              <span style={{ color: on ? C.blue : C.faint, marginLeft: 6, opacity: 0.7 }}>{counts[opt]}</span>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// ─── Module root ─────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------------
 export default function SelfServedModule() {
   const [present, setPresent] = useState(false);
   const [maxDays, setMaxDays] = useState(90);
+  const [tab, setTab] = useState("eligible");
+  const [openId, setOpenId] = useState(null);
+
   const d = SELFSERVED;
 
-  const within = (iso) => {
-    const a = daysAgo(iso, d.today);
-    return a != null && a <= maxDays;
-  };
-  // Recency-first: newest activation on top, composite score only breaks ties.
-  const items = d.items
-    .filter((it) => within(it.account_became_active))
-    .sort((a, b) => {
-      if (a.account_became_active !== b.account_became_active) {
-        return a.account_became_active < b.account_became_active ? 1 : -1;
-      }
-      return b.rank_score - a.rank_score;
-    });
-  const counts = RECENCY_OPTS.reduce((m, opt) => {
-    m[opt] = d.items.filter((it) => {
-      const a = daysAgo(it.account_became_active, d.today);
-      return a != null && a <= opt;
-    }).length;
-    return m;
-  }, {});
-  const onboardItems = items.filter((it) => needsOnboarding(it, d.today));
+  // Recency first, score only to break ties. The composite score is a quality
+  // signal, not a priority - a strong lead that activated two months ago has
+  // already formed its habits.
+  const items = useMemo(() => {
+    return d.items
+      .filter((it) => {
+        const a = daysAgo(it.account_became_active, d.today);
+        return a != null && a <= maxDays;
+      })
+      .sort((a, b) => {
+        if (a.account_became_active !== b.account_became_active) {
+          return a.account_became_active < b.account_became_active ? 1 : -1;
+        }
+        return b.rank_score - a.rank_score;
+      });
+  }, [d.items, d.today, maxDays]);
+
+  const counts = useMemo(() => {
+    return RECENCY_OPTS.reduce((m, opt) => {
+      m[opt] = d.items.filter((it) => {
+        const a = daysAgo(it.account_became_active, d.today);
+        return a != null && a <= opt;
+      }).length;
+      return m;
+    }, {});
+  }, [d.items, d.today]);
+
+  const onboardCount = items.filter((it) => isOnboardingAlert(it, d.today)).length;
+  const untouched = items.filter((it) => !it.engagement.notes_last_contacted).length;
 
   return (
     <MaskCtx.Provider value={present}>
-      <div style={{ height: "100vh", overflowY: "auto", background: C.bg, color: C.txt, fontFamily: FONT }}>
-        <div style={{ maxWidth: 980, margin: "0 auto", padding: "40px 28px 80px" }}>
-
-          {/* header */}
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-            <div>
-              <h1 style={{ fontSize: 17, fontWeight: 600, margin: 0, letterSpacing: "-0.2px", color: C.txt }}>
-                Self-Served Tracker
-              </h1>
-              <div style={{ fontSize: 11, color: C.faint, fontFamily: MONO, margin: "5px 0 0" }}>
-                {d.owner} · live from HubSpot · {d.refreshedAt.split(" - ")[0]}
-              </div>
-            </div>
-            <PresentToggle on={present} set={setPresent} />
-          </div>
-          <div style={{ height: 28 }} />
-
-          <FunnelStrip f={d.funnel} />
-
-          <RecencyFilter value={maxDays} set={setMaxDays} counts={counts} />
-
-          {/* onboarding / upsell alert - self-served accounts active 3-30 days */}
-          {onboardItems.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+      <Page>
+        <PageHeader
+          num="05 · Self-Served"
+          title="Untouched self-served accounts"
+          sub={`${d.owner} · activated between ${d.windowStart} and ${d.windowEnd} · no open or won deal`}
+          right={
+            <button
+              onClick={() => setPresent((v) => !v)}
+              title={present ? "PII hidden for screen-share" : "Hide email and phone for screen-share"}
               style={{
-                display: "flex", alignItems: "center", gap: 12, marginBottom: 18,
-                background: "rgba(249,112,102,0.08)", border: `1px solid ${C.red}44`,
-                borderRadius: 12, padding: "13px 16px",
+                font: `400 ${T.micro}px/1 ${FONT_SANS}`,
+                color: present ? SEMANTIC.warn.fill : C.textHint,
+                background: present ? SEMANTIC.warn.bg : C.wellBg,
+                border: `1px solid ${present ? SEMANTIC.warn.border : C.borderStrong}`,
+                borderRadius: R.pill, padding: "7px 13px", cursor: "pointer",
               }}
             >
-              <span style={{ fontSize: 16, lineHeight: 1 }}>⚠</span>
-              <div style={{ fontSize: 12.5, color: C.txt, lineHeight: 1.5 }}>
-                <span style={{ fontWeight: 600, color: C.red }}>{onboardItems.length} self-served account{onboardItems.length === 1 ? "" : "s"} active {ONBOARD_MIN_DAYS}-{ONBOARD_MAX_DAYS} days</span>
-                {" "}- reach out for proper onboarding and an upsell pass before usage habits set. Flagged on each card below.
-              </div>
-            </motion.div>
-          )}
+              {present ? "PII hidden" : "Present mode"}
+            </button>
+          }
+        />
 
-          {/* eligible cohort */}
-          {items.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "48px 24px", color: C.mut, background: C.surf, border: `1px solid ${C.line}`, borderRadius: 16 }}>
-              No eligible self-served leads activated within {maxDays} days. {d.items.length} sit in the full 90-day window - widen the filter to see them.
-            </div>
-          ) : (
-            <AnimatePresence>
-              {items.map((it, i) => (
-                <LeadCard key={it.hsObjectId} item={it} today={d.today} rank={i} />
-              ))}
-            </AnimatePresence>
-          )}
+        <StatRow>
+          <Stat
+            size="sm" label="Eligible" value={items.length}
+            note={maxDays < 90 ? `of ${d.items.length} in the full window` : "nobody is working these"}
+          />
+          <Stat
+            size="sm" label="In onboarding window" value={onboardCount}
+            note={`activated ${ONBOARD_MIN_DAYS}-${ONBOARD_MAX_DAYS} days ago`}
+            noteLevel={onboardCount > 0 ? "risk" : undefined}
+          />
+          <Stat
+            size="sm" label="Never contacted" value={untouched}
+            note="no note on the record at all"
+            noteLevel={untouched > 0 ? "warn" : undefined}
+          />
+          <Stat
+            size="sm" label="Filtered out" value={d.funnel.activeInWindow - d.funnel.eligible}
+            note="qualified or already a customer"
+          />
+        </StatRow>
 
-          {/* not eligible this window - audit trail */}
-          <NotEligible ne={d.notEligible} today={d.today} maxDays={maxDays} />
+        {onboardCount > 0 && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 11,
+            marginTop: 20,
+            background: SEMANTIC.risk.bg, border: `1px solid ${SEMANTIC.risk.border}`,
+            borderRadius: R.md, padding: "12px 15px",
+            font: `400 ${T.micro + 1}px/1.5 ${FONT_SANS}`, color: C.textMid,
+          }}>
+            <StatusDot level="risk" />
+            <span>
+              <strong style={{ color: SEMANTIC.risk.fill, fontWeight: 500 }}>
+                {onboardCount} account{onboardCount === 1 ? "" : "s"} activated {ONBOARD_MIN_DAYS}-{ONBOARD_MAX_DAYS} days ago
+              </strong>
+              {" - past first touch, before habits set. This is the window where an onboarding call still changes the outcome."}
+            </span>
+          </div>
+        )}
 
-          {/* footnote */}
-          <div style={{ fontSize: 10.5, color: C.faint, fontFamily: MONO, marginTop: 28, lineHeight: 1.6, borderTop: `1px solid ${C.line}`, paddingTop: 14 }}>
-            Cohort = contacts owned by {d.owner} (ownerId {d.ownerId}), hs_lead_status ≠ Qualified, account_became_active in {d.windowStart} → {d.windowEnd}, with zero open/won deals on the contact or any associated company. Closed-lost-only contacts are kept and flagged RE-ENGAGE.<br />
-            Ordered by activation recency - newest account_became_active on top. Score = seats {Math.round(d.weights.seat * 100)}% · geo {Math.round(d.weights.geo * 100)}% · source {Math.round(d.weights.source * 100)}% (T1=100 · T2=66 · T3=33), a quality signal that only breaks recency ties. Source: HubSpot {d.portalId}, pulled via /hs.
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          gap: 16, flexWrap: "wrap", margin: "22px 0 18px",
+        }}>
+          <TabBar
+            value={tab}
+            onChange={setTab}
+            tabs={[
+              { id: "eligible", label: `Eligible · ${items.length}` },
+              { id: "funnel", label: "Cohort audit" },
+              { id: "excluded", label: "Excluded" },
+            ]}
+          />
+          <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+            <SectionLabel>Activated within</SectionLabel>
+            <TabBar
+              size="sm"
+              value={maxDays}
+              onChange={setMaxDays}
+              tabs={RECENCY_OPTS.map((o) => ({
+                id: o,
+                label: `${o === 90 ? "90d all" : `${o}d`} · ${counts[o]}`,
+              }))}
+            />
           </div>
         </div>
-      </div>
+
+        {tab === "funnel" ? (
+          <Funnel f={d.funnel} />
+        ) : tab === "excluded" ? (
+          <ExcludedTab ne={d.notEligible} today={d.today} maxDays={maxDays} />
+        ) : items.length === 0 ? (
+          <Card>
+            <Empty level="idle">
+              Nothing activated within {maxDays} days. {d.items.length} sit in the full
+              90-day window - widen the filter to see them.
+            </Empty>
+          </Card>
+        ) : (
+          <Card title="Eligible accounts" right={<SectionLabel>newest activation first</SectionLabel>}>
+            <div style={{
+              display: "grid", gridTemplateColumns: LEAD_COLS, gap: 12,
+              padding: "0 8px 10px", margin: "0 -8px",
+              borderBottom: `1px solid ${C.border}`,
+            }}>
+              <SectionLabel>Score</SectionLabel>
+              <SectionLabel>Contact</SectionLabel>
+              <SectionLabel>Age</SectionLabel>
+              <SectionLabel>Size</SectionLabel>
+              <SectionLabel>Last touch</SectionLabel>
+              <SectionLabel style={{ textAlign: "right" }}>&nbsp;</SectionLabel>
+            </div>
+            {items.map((it, i) => (
+              <LeadRow
+                key={it.hsObjectId}
+                item={it}
+                today={d.today}
+                last={i === items.length - 1}
+                open={openId === it.hsObjectId}
+                onToggle={() => setOpenId(openId === it.hsObjectId ? null : it.hsObjectId)}
+              />
+            ))}
+          </Card>
+        )}
+
+        <div style={{
+          marginTop: 32, paddingTop: 18, borderTop: `1px solid ${C.border}`,
+          font: `400 ${T.micro}px/1.6 ${FONT_SANS}`, color: C.textHint, maxWidth: "88ch",
+          display: "flex", flexDirection: "column", gap: 8,
+        }}>
+          <p style={{ margin: 0 }}>
+            Cohort = contacts owned by {d.owner} (owner {d.ownerId}), lead status not
+            Qualified, account activated between {d.windowStart} and {d.windowEnd}, with
+            zero open or won deals on the contact or any associated company.
+            Closed-lost-only contacts are kept and flagged RE-ENGAGE.
+          </p>
+          <p style={{ margin: 0 }}>
+            Score = seats {Math.round(d.weights.seat * 100)}% · geo {Math.round(d.weights.geo * 100)}%
+            {" "}· source {Math.round(d.weights.source * 100)}% (T1 100, T2 66, T3 33). It only
+            breaks ties - the list is ordered by activation recency, because that is the
+            thing that expires.
+            {GENERATED_AT && (
+              <span style={{ fontFamily: FONT_MONO, color: C.textFaint }}>
+                {" "}HubSpot {d.portalId}, pulled{" "}
+                {new Date(GENERATED_AT).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}.
+              </span>
+            )}
+          </p>
+        </div>
+      </Page>
     </MaskCtx.Provider>
   );
 }

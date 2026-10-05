@@ -21,7 +21,7 @@ credentials*.json
 # The `*token*` rule above is for secrets. This one file is the design system
 # (colours, type scale, z-index) and is imported by the whole component tree,
 # so a clone will not build without it. Narrow exception, not a weakening.
-!src/design/tokens.js
+!src/lib/tokens.js
 
 # === Per-operator identity (never commit) ===
 # Real name, work email, HubSpot owner id. src/config.example.js is the tracked
@@ -54,7 +54,7 @@ public/numbers-data.csv
 # Generator input. Every refresh hands the generators a payload staged here, and
 # those payloads are the raw pull - deal names, prospect names, emails. They
 # survive the run on disk, so glob them rather than relying on cleanup.
-.tmp-*-payload.json
+.tmp-*.json
 
 # === Logs ===
 logs/
@@ -80,3 +80,6 @@ lerna-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# visual brainstorm sessions
+.superpowers/

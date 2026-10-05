@@ -26,7 +26,7 @@ export const MODULES = [
   { id: "performance", num: "04", label: "Performance", sub: "SQL / SQO",        accent: "emerald", status: "live", signal: "SQL / SQO tracker" },
   { id: "selfserved",  num: "05", label: "Self-Served", sub: "Untouched MQLs",   accent: "emerald", status: "live", signal: "Re-engage cohort" },
   { id: "pacing",      num: "06", label: "SDR Pacing",  sub: "Team tracker",     accent: "orange",  status: "live", signal: "SQL / SQO pacing" },
-  { id: "deals",       num: "07", label: "Deals",       sub: "Awaiting AE",      accent: "amber",   status: "live", signal: "Deal outcomes" },
+  { id: "deals",       num: "07", label: "Pipeline",    sub: "Qualified to AE",  accent: "amber",   status: "live", signal: "Pipeline stages" },
 ];
 
 // The Constellation shows every module except itself.

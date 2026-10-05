@@ -20,7 +20,7 @@ const SOURCES = [
   { id: "performance", num: "04", label: "Performance", stamp: performanceData.GENERATED_AT },
   { id: "selfserved",  num: "05", label: "Self-Served", stamp: selfservedData.GENERATED_AT },
   { id: "pacing",      num: "06", label: "SDR Pacing",  stamp: pacingData.GENERATED_AT },
-  { id: "deals",       num: "07", label: "Deals",       stamp: dealsData.GENERATED_AT },
+  { id: "deals",       num: "07", label: "Pipeline",    stamp: dealsData.GENERATED_AT },
 ];
 
 function localDayKey(d) {

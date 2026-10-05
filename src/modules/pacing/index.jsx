@@ -12,6 +12,7 @@
 import { useState, useMemo } from "react";
 import { PACING, GENERATED_AT } from "./data.js";
 import { PREVIOUS_MONTH } from "../../pacing.config.js";
+import { PROFILE } from "../../config.js";
 import {
   Page, PageHeader, Card, SectionLabel, Stat, StatRow, StatusDot,
   Glyph, DataList, DataRow, TabBar, ProgressBar, Empty,
@@ -215,7 +216,215 @@ function Forecast({ title, note, m, hasData }) {
 }
 
 // ---------------------------------------------------------------------------
-// Team tab - forecast only, no names
+// Cumulative curve - the month as a line
+// ---------------------------------------------------------------------------
+// Needs PACING.daily (per-day team SQL MRR); refreshes before the day-grain
+// query landed in the spec do not carry it, so the card degrades to a note
+// rather than an empty chart. Actual cumulates to today, a dashed flat-run-rate
+// projection carries on to month-end, the straight line is the target path, and
+// the wash between them is the runway still to make up.
+function CumulativeCurve({ daily, target, monthLabel, todayIso }) {
+  const built = useMemo(() => {
+    if (!Array.isArray(daily) || daily.length === 0 || !todayIso) return null;
+    const [y, m] = todayIso.split("-").map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const byDate = new Map(daily.map((d) => [d.date, Number(d.sqlMrr) || 0]));
+    const todayDom = Number(todayIso.split("-")[2]);
+
+    let run = 0;
+    const actual = [];
+    for (let d = 1; d <= Math.min(todayDom, daysInMonth); d++) {
+      const iso = `${todayIso.slice(0, 8)}${String(d).padStart(2, "0")}`;
+      run += byDate.get(iso) || 0;
+      actual.push({ day: d, y: run });
+    }
+    const rate = todayDom > 0 ? run / todayDom : 0;
+    const projEnd = run + rate * (daysInMonth - todayDom);
+    return { actual, daysInMonth, todayDom, booked: run, projEnd };
+  }, [daily, todayIso]);
+
+  if (!built) {
+    return (
+      <Empty level="idle">
+        Day-by-day series arrives with the next refresh - the curve draws itself from there.
+      </Empty>
+    );
+  }
+
+  const { actual, daysInMonth, todayDom, booked, projEnd } = built;
+  const W = 640, H = 180, padT = 12, padB = 20;
+  const max = Math.max(target, projEnd, booked, 1) * 1.08;
+  const px = (day) => ((day - 1) / (daysInMonth - 1)) * W;
+  const py = (v) => H - padB - (v / max) * (H - padT - padB);
+
+  const actualPath = actual.map((p, i) => `${i === 0 ? "M" : "L"}${px(p.day).toFixed(1)},${py(p.y).toFixed(1)}`).join(" ");
+  const areaPath = `${actualPath} L${px(todayDom).toFixed(1)},${H - padB} L0,${H - padB} Z`;
+  const targetEndY = py(target);
+  const projShort = projEnd < target;
+  // Runway band: projection vs target path, from today to month-end.
+  const targetAtToday = (target * todayDom) / daysInMonth;
+  const band = [
+    `M${px(todayDom).toFixed(1)},${py(booked).toFixed(1)}`,
+    `L${px(daysInMonth).toFixed(1)},${py(projEnd).toFixed(1)}`,
+    `L${px(daysInMonth).toFixed(1)},${targetEndY.toFixed(1)}`,
+    `L${px(todayDom).toFixed(1)},${py(targetAtToday).toFixed(1)}`,
+    "Z",
+  ].join(" ");
+
+  const bandColor = projShort ? SEMANTIC.risk.fill : SEMANTIC.ok.fill;
+
+  return (
+    <div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none"
+           style={{ width: "100%", height: H, display: "block", overflow: "visible" }}>
+        {[0.2, 0.5, 0.8].map((f) => (
+          <line key={f} x1="0" y1={H * f} x2={W} y2={H * f} stroke={C.border} strokeWidth="1" />
+        ))}
+        {/* target path */}
+        <line x1={px(1)} y1={py(0)} x2={px(daysInMonth)} y2={targetEndY}
+              stroke={C.amber} strokeWidth="1.5" strokeDasharray="4 5" opacity="0.6" />
+        {/* runway band */}
+        <path d={band} fill={bandColor} opacity="0.08" />
+        {/* projection */}
+        <line x1={px(todayDom)} y1={py(booked)} x2={px(daysInMonth)} y2={py(projEnd)}
+              stroke={bandColor} strokeWidth="1.5" strokeDasharray="2 5" opacity="0.8" />
+        {/* actual */}
+        <path d={areaPath} fill={C.cyan} opacity="0.07" />
+        <path d={actualPath} fill="none" stroke={C.cyan} strokeWidth="2"
+              strokeLinejoin="round" strokeLinecap="round" />
+        <circle cx={px(todayDom)} cy={py(booked)} r="3.5" fill={C.cyan} />
+        {/* today marker */}
+        <line x1={px(todayDom)} y1={padT} x2={px(todayDom)} y2={H - padB}
+              stroke={C.textFaint} strokeWidth="1" strokeDasharray="2 4" opacity="0.5" />
+      </svg>
+      <div style={{
+        display: "flex", justifyContent: "space-between", marginTop: 8,
+        font: `400 ${T.micro}px/1 ${FONT_SANS}`, color: C.textHint, ...NUM,
+      }}>
+        <span>{monthLabel} day 1</span>
+        <span>
+          <span style={{ color: C.cyan }}>— booked {eurK(booked)}</span>
+          {"  ·  "}
+          <span style={{ color: bandColor }}>- - projects {eurK(projEnd)}</span>
+          {"  ·  "}
+          <span style={{ color: C.amber }}>- - target {eurK(target)}</span>
+        </span>
+        <span>day {daysInMonth}</span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Strip plot - where everyone stands
+// ---------------------------------------------------------------------------
+// One axis: SQO pace (booked vs expected-by-now). Every SDR is a badge on it,
+// ringed by office, Santiago lit. This deliberately puts names on the team tab -
+// position on a shared axis is a snapshot, not a leaderboard ranking.
+function StripPlot({ roster, actuals }) {
+  const rows = useMemo(() => {
+    const out = [];
+    for (const m of roster) {
+      const a = actuals[m.id];
+      if (!a) continue;
+      const pct = metric(Number(a.sqoMrr) || 0, m.sqo, m.cal, 0).pct;
+      if (pct == null) continue;
+      out.push({ name: m.name, office: m.office, pct });
+    }
+    return out.sort((a, b) => a.pct - b.pct);
+  }, [roster, actuals]);
+
+  if (rows.length === 0) return <Empty level="idle">No SDR data loaded yet.</Empty>;
+
+  const lo = Math.min(0, ...rows.map((r) => r.pct));
+  const hi = Math.max(120, Math.ceil(Math.max(...rows.map((r) => r.pct)) / 10) * 10 + 10);
+  const x = (pct) => ((Math.min(Math.max(pct, lo), hi) - lo) / (hi - lo)) * 100;
+
+  // Greedy lane assignment: badges within 4% of an occupied spot drop a lane.
+  // Positions clamp a badge-radius in from the edges so 0% is not half-clipped.
+  const lanes = [];
+  const placed = rows.map((r) => {
+    const xr = Math.min(97.5, Math.max(2.5, x(r.pct)));
+    let lane = 0;
+    while (lanes[lane] != null && xr - lanes[lane] < 4.5) lane++;
+    lanes[lane] = xr;
+    return { ...r, x: xr, lane };
+  });
+  const laneCount = Math.max(...placed.map((p) => p.lane)) + 1;
+  const bands = [
+    { from: lo, to: 80, label: "At risk", color: SEMANTIC.risk.fill },
+    { from: 80, to: 100, label: "Behind", color: SEMANTIC.warn.fill },
+    { from: 100, to: hi, label: "On pace", color: SEMANTIC.ok.fill },
+  ];
+  const BADGE = 30, LANE_H = 36;
+
+  return (
+    <div>
+      <div style={{ position: "relative", height: laneCount * LANE_H + 26 }}>
+        {/* band washes + boundaries */}
+        {bands.map((b) => (
+          <div key={b.label} style={{
+            position: "absolute", top: 0, bottom: 26,
+            left: `${x(b.from)}%`, width: `${x(b.to) - x(b.from)}%`,
+            background: `${b.color}0d`, borderLeft: b.from === lo ? "none" : `1px dashed ${C.border}`,
+            borderRadius: b.from === lo ? `${R.sm}px 0 0 ${R.sm}px` : b.to === hi ? `0 ${R.sm}px ${R.sm}px 0` : 0,
+          }} />
+        ))}
+        {/* badges */}
+        {placed.map((p) => {
+          const me = p.name === PROFILE.name;
+          const ring = p.office === "BCN" ? C.cyan : C.purple;
+          return (
+            <span
+              key={p.name}
+              title={`${p.name} · ${p.office === "BCN" ? "Barcelona" : "Toronto"} · ${Math.round(p.pct)}% of pace`}
+              style={{
+                position: "absolute",
+                left: `calc(${p.x}% - ${BADGE / 2}px)`,
+                top: 6 + p.lane * LANE_H,
+                width: BADGE, height: BADGE, borderRadius: "50%",
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                font: `600 ${T.label}px/1 ${FONT_SANS}`, letterSpacing: TRACK.label,
+                color: me ? C.text : C.textMid,
+                background: me ? C.bloomBg : C.cardBg,
+                border: `2px solid ${me ? C.bloom : ring}`,
+                boxShadow: me ? C.bloomGlow : "none",
+                zIndex: me ? 2 : 1, cursor: "default",
+              }}
+            >
+              {initials(p.name)}
+            </span>
+          );
+        })}
+        {/* band labels */}
+        {bands.map((b) => (
+          <span key={b.label} style={{
+            position: "absolute", bottom: 0, left: `${x(b.from)}%`, paddingLeft: 8,
+            font: `500 ${T.label}px/1 ${FONT_SANS}`, letterSpacing: TRACK.label,
+            textTransform: "uppercase", color: b.color,
+          }}>
+            {b.label}{b.from > lo ? ` · ${b.from}%` : ""}
+          </span>
+        ))}
+      </div>
+      <div style={{
+        display: "flex", alignItems: "center", gap: 16, marginTop: 12,
+        font: `400 ${T.micro}px/1 ${FONT_SANS}`, color: C.textHint,
+      }}>
+        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ width: 9, height: 9, borderRadius: "50%", border: `2px solid ${C.cyan}` }} /> Barcelona
+        </span>
+        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ width: 9, height: 9, borderRadius: "50%", border: `2px solid ${C.purple}` }} /> Toronto
+        </span>
+        <span style={{ marginLeft: "auto" }}>axis is SQO pace - booked vs expected by today</span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Team tab - forecast first, then the month as a line, then the people on it
 // ---------------------------------------------------------------------------
 function TeamTab({ roster, actuals, bcn, tor }) {
   const all = useMemo(() => aggregate(roster, actuals), [roster, actuals]);
@@ -227,12 +436,51 @@ function TeamTab({ roster, actuals, bcn, tor }) {
     { key: "TOR", label: "Toronto", region: "NA", agg: torAgg },
   ];
 
+  // The drag: whichever office sits further behind its own expected line, in €.
+  // One derived sentence, shown only when someone actually is behind.
+  const drag = useMemo(() => {
+    if (!all.hasData) return null;
+    const deltas = groups.map((g) => ({
+      label: g.label, delta: g.agg.sqo.actual - g.agg.sqo.expected,
+    }));
+    const worst = deltas.sort((a, b) => a.delta - b.delta)[0];
+    return worst && worst.delta < 0 ? worst : null;
+  }, [all.hasData, bcnAgg, torAgg]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         <Forecast title="SQL created" m={all.sql} hasData={all.hasData} />
         <Forecast title="SQO accepted" m={all.sqo} hasData={all.hasData} />
       </div>
+
+      {drag && (
+        <div style={{
+          border: `1px solid ${SEMANTIC.warn.border}`, borderRadius: R.lg,
+          background: SEMANTIC.warn.bg, padding: "12px 16px",
+          display: "flex", alignItems: "center", gap: 9,
+          font: `400 ${T.body - 1}px/1.4 ${FONT_SANS}`, color: C.textMid,
+        }}>
+          <StatusDot level="warn" />
+          <span>
+            <strong style={{ color: C.text, fontWeight: 500 }}>{drag.label} is the drag</strong>
+            {" - "}{eurK(Math.abs(drag.delta))} behind where today expects on SQO.
+          </span>
+        </div>
+      )}
+
+      <Card title="The month as a line" right={<SectionLabel>SQL created · cumulative</SectionLabel>}>
+        <CumulativeCurve
+          daily={PACING.daily}
+          target={all.sql.target}
+          monthLabel={PACING.monthLabel}
+          todayIso={PACING.todayIso}
+        />
+      </Card>
+
+      <Card title="Where everyone stands" right={<SectionLabel>SQO pace</SectionLabel>}>
+        <StripPlot roster={roster} actuals={actuals} />
+      </Card>
 
       <Card title="Office split" right={<SectionLabel>{all.size} SDRs</SectionLabel>}>
         <DataList>

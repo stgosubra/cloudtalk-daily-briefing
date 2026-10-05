@@ -174,7 +174,7 @@ File: `src/modules/performance/data.js`. Single export `PERFORMANCE`. All counts
 
 - `refreshedAt`, `weekLabel`, `monthLabel`, `pacing.today` / `dayOfMonth` / `daysInMonth` / `earned`.
 - `points[]`, `acceptance`, `acceptanceByMonth[]` + `acceptanceYtd`, `sqoToWonByMonth[]` + `sqoToWonYtd`.
-- `stalls[]` (this month's SQLs still pending an AE decision; UI flags > 24h old).
+- `stalls[]` (SQLs still pending an AE decision; rendered by module 07's qualified-no-decision lane, which filters to the current month - a pre-month stall pays no commission and is never shown).
 - `funnel` (MQL by month; SQL/SQO/rejected/pending + value by seat tier by month; AI vs core by month).
 - `metrics` (week + month headline), `mqlToSql`, `progression[]`.
 - `rejectedByOwner[]`, `mqlGeo[]` + `mqlGeoTotal`, `segmentSplit`, `segmentMonthly[]`, `geo[]` + `geoTotal`.
@@ -280,6 +280,18 @@ GROUP BY deal_creator__sdr_only_
 
 Both queries run in parallel. Owner IDs come from `pacing.config.js` roster, not hardcoded. Results are keyed by owner ID in the `actuals` object.
 
+**Day-grain series (current month)** - two more aggregations, grouped by day instead of SDR, feeding the team tab's cumulative curve:
+
+```
+SELECT createdate, SUM(amount_in_home_currency)
+FROM deals
+WHERE deal_creator__sdr_only_ IN (<all roster owner IDs>)
+  AND createdate BETWEEN <month_start> AND <now>
+GROUP BY <day of createdate>
+```
+
+and the same shape on `accepted_deal__date_time_` with `deal_accepted_by_ae = 'true'`. If the connector's SQL cannot GROUP BY a date truncation, pull the per-deal rows (two columns only: date property + amount) and bucket by calendar day at payload-assembly time - the cohort filters stay identical to the per-SDR queries, so the totals must re-add to the same numbers. These run in the same parallel batch; same window, same cohorts.
+
 ### Payload assembly
 
 1. Read `CURRENT_MONTH` from `src/pacing.config.js` for targets, roster, offices, pool.
@@ -293,9 +305,12 @@ Both queries run in parallel. Owner IDs come from `pacing.config.js` roster, not
   roster: [{ id, name, office, sql, sqo, cal: { total, elapsed, left }, note? }],
   actuals: { "<ownerId>": { sqlMrr, sqlDeals, sqoMrr, sqoDeals } },
   offices: { BCN: { label, region, workingDays }, TOR: { ... } },
-  pool: { sql, sqo }
+  pool: { sql, sqo },
+  daily: [{ date: "YYYY-MM-DD", sqlMrr, sqoMrr }]  // team totals per calendar day, non-cumulative
 }
 ```
+
+`daily` covers month start through today; days with nothing booked may be omitted (the UI treats a missing day as zero). The key is optional for backwards compatibility, but every refresh from 2026-10-06 onward must include it - omit it only with a declared dataGap.
 
 4. Write to temp file, run `node scripts/gen-pacing.mjs <payload.json>`.
 
@@ -305,6 +320,7 @@ Both queries run in parallel. Owner IDs come from `pacing.config.js` roster, not
 - Every roster entry has `id`, `name`, `office`, `sql`, `sqo`, `cal`.
 - Actuals keyed by owner ID.
 - If `rollups.team` is present, team SQL/SQO must equal sum of individual actuals.
+- If `daily` is present: every entry is `{ date: YYYY-MM-DD, sqlMrr: number, sqoMrr: number }`, and the series sums must equal the actuals sums (SQL and SQO each, within €0.01).
 
 ### Cadence
 

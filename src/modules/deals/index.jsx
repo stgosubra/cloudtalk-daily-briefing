@@ -1,23 +1,28 @@
-// Deals - module 07.
+// Pipeline - module 07.
 //
-// Every deal created this calendar month where Santiago is the deal creator, laid
-// out by what the AE did with it. Left to right the four columns are the deal's
-// actual journey - Upcoming, Awaiting decision, Accepted, Rejected - so a column
-// that is filling up says where the month is stuck before you read a number.
+// The whole journey of this month's qualified work, left to right: qualified
+// SQLs that have not reached a demo decision yet (fed from the performance
+// pull, scoped to this month - older stalls do not pay commission and are not
+// shown), then every deal created this month laid out by what the AE did with
+// it - Upcoming, Awaiting decision, Accepted, Rejected. A stage filling up
+// says where the month is stuck before you read a number.
 //
 // The one number this module exists to surface is the breach count: an AE has 48h
 // from the demo to accept or reject, and past that the deal is sitting. Breach is
 // derived here from ageH vs slaHours, never read off a stored flag.
 //
-// Data comes from data.js (machine-generated). Everything else - segment labels,
-// the SLA, the column order - comes from deals.config.js.
+// Data comes from data.js (machine-generated) plus the sibling performance
+// data.js for the qualified-no-deal lane - read-only, same pattern as module 05
+// reading its neighbours. Everything else - segment labels, the SLA, the column
+// order - comes from deals.config.js.
 
 import { useMemo, useState } from "react";
 import { DEALS } from "./data.js";
+import { PERFORMANCE, GENERATED_AT as PERF_GENERATED_AT } from "../performance/data.js";
 import {
   COLUMNS, OUTCOME_LEVEL, SEG_LABEL, SLA_HOURS, MONTHLY_TARGET_EUR,
 } from "../../deals.config.js";
-import { hsDealUrl } from "../../config.js";
+import { hsDealUrl, hsContactUrl } from "../../config.js";
 import {
   Page, PageHeader, Card, SectionLabel, Stat, StatRow, StatusDot, Badge, Glyph,
   DataList, DataRow, TabBar, ProgressBar, Empty,
@@ -278,6 +283,90 @@ function Column({ col, deals, slaHours, now, totalAmt }) {
 }
 
 // --------------------------------------------------------------------------
+// Stage 1 - qualified, no demo decision yet
+// --------------------------------------------------------------------------
+// These are contacts (SQLs), not deals - one funnel stage earlier than the four
+// columns. They come from the performance pull already on disk; nothing new is
+// pulled for this lane. Scoped hard to the current month: a stall created in a
+// previous month cannot pay this month's commission, so it does not exist here.
+
+const STALL_COLS = "16px minmax(150px, 1.6fr) 110px 70px 90px 64px 64px";
+
+function StallLane({ stalls, now, staleNote }) {
+  const pts = sum(stalls, (s) => s.points);
+
+  return (
+    <Card
+      title="Qualified · no demo decision"
+      label="this month's SQLs still waiting on a demo outcome"
+      right={
+        <SectionLabel style={{ color: stalls.length ? C.amber : C.emerald }}>
+          {stalls.length} waiting · {pts} pts in play
+        </SectionLabel>
+      }
+      style={{ marginBottom: 22 }}
+    >
+      {stalls.length === 0 ? (
+        <Empty level="ok">Nothing waiting - every qualified lead this month has a deal moving.</Empty>
+      ) : (
+        <DataList>
+          {stalls.map((s, i) => {
+            const days = Math.floor(s.ageH / 24);
+            // 96h is where waiting stops being slow and starts being forgotten.
+            const urgent = s.ageH >= 96;
+            return (
+              <DataRow
+                key={s.id}
+                last={i === stalls.length - 1}
+                onClick={() => window.open(hsContactUrl(s.id), "_blank", "noreferrer")}
+                style={{ display: "grid", gridTemplateColumns: STALL_COLS, gap: 12, alignItems: "center" }}
+              >
+                <StatusDot level={urgent ? "risk" : "warn"} />
+                <span style={{
+                  font: `500 ${T.body}px/1.3 ${FONT_SANS}`, color: C.text,
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}>
+                  {s.name}
+                </span>
+                <span style={{
+                  font: `400 ${T.micro}px/1 ${FONT_SANS}`, color: C.textMuted,
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}>
+                  {s.country || "-"}
+                </span>
+                <span style={{ font: `400 ${T.micro}px/1 ${FONT_MONO}`, color: C.textMuted, textAlign: "right", ...NUM }}>
+                  {s.seats ? `${s.seats} seats` : "-"}
+                </span>
+                <span style={{ font: `400 ${T.micro}px/1 ${FONT_MONO}`, color: C.textMid, textAlign: "right", ...NUM }}>
+                  {s.value != null ? eur(s.value) : "-"}
+                </span>
+                <span style={{ font: `400 ${T.micro}px/1 ${FONT_MONO}`, color: C.textMid, textAlign: "right", ...NUM }}>
+                  {s.points} pts
+                </span>
+                <span style={{
+                  font: `400 ${T.micro}px/1 ${FONT_MONO}`, textAlign: "right", ...NUM,
+                  color: urgent ? C.red : C.amber,
+                }}>
+                  {days}d old
+                </span>
+              </DataRow>
+            );
+          })}
+        </DataList>
+      )}
+      {staleNote && (
+        <div style={{
+          font: `400 ${T.label}px/1.4 ${FONT_SANS}`, color: C.textFaint,
+          marginTop: 12, paddingTop: 10, borderTop: `1px solid ${C.divider}`,
+        }}>
+          {staleNote}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// --------------------------------------------------------------------------
 // By AE
 // --------------------------------------------------------------------------
 // Acceptance rate counts only deals the AE has actually ruled on. Deals still
@@ -414,6 +503,31 @@ export default function DealsModule() {
   const target = DEALS.target || MONTHLY_TARGET_EUR;
   const deals = DEALS.deals || [];
 
+  // Stage 1 feed: performance stalls, current month only. Older stalls do not
+  // count toward this month's commission and are deliberately invisible.
+  // The lane's pull can be a slot older than the board's, so a lead whose deal
+  // already sits on the board is dropped - stage 1 means "no deal yet", and the
+  // stall names are "<Company> - New Deal...", so a prefix match on the board's
+  // deal names identifies the ones that have moved on.
+  const stalls = useMemo(() => {
+    const monthStart = new Date(DEALS.monthStart);
+    const dealNames = deals.map((d) => (d.name || "").toLowerCase()).filter(Boolean);
+    return (PERFORMANCE.stalls || [])
+      .filter((s) => s.createdate && new Date(s.createdate) >= monthStart)
+      .filter((s) => !dealNames.some((n) => (s.name || "").toLowerCase().startsWith(n)))
+      .map((s) => ({ ...s, ageH: (now - new Date(s.createdate)) / 36e5 }))
+      .sort((a, b) => b.ageH - a.ageH);
+  }, [now, deals]);
+
+  // The lane rides a different pull than the board; say so when it is older.
+  const stallStaleNote = useMemo(() => {
+    if (!PERF_GENERATED_AT) return null;
+    const perf = new Date(PERF_GENERATED_AT);
+    const own = DEALS.todayIso ? new Date(DEALS.todayIso) : null;
+    if (own && perf.toISOString().slice(0, 10) >= own.toISOString().slice(0, 10)) return null;
+    return `Lane pulled ${perf.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} with the performance refresh - one slot behind the board.`;
+  }, []);
+
   const grouped = useMemo(() => {
     const g = Object.fromEntries(COLUMNS.map((c) => [c.id, []]));
     for (const d of deals) (g[d.outcome] ||= []).push(d);
@@ -449,9 +563,9 @@ export default function DealsModule() {
   return (
     <Page>
       <PageHeader
-        num="07 · Deals"
+        num="07 · Pipeline"
         title={DEALS.monthLabel || "This month"}
-        sub="Every deal I created this month, and what the AE did with it. The clock starts at the demo."
+        sub="This month's qualified work, left to right: qualified and waiting, demo booked, awaiting the AE, decided."
         right={
           <TabBar
             value={tab}
@@ -506,7 +620,9 @@ export default function DealsModule() {
 
       <div style={{ marginTop: 26 }}>
         {tab === "board" ? (
-          deals.length === 0 ? (
+          <>
+          <StallLane stalls={stalls} now={now} staleNote={stallStaleNote} />
+          {deals.length === 0 ? (
             <Empty level="idle">No deals created this month yet.</Empty>
           ) : (
             <div style={{
@@ -526,7 +642,8 @@ export default function DealsModule() {
                 />
               ))}
             </div>
-          )
+          )}
+          </>
         ) : (
           <AeTab deals={deals} slaHours={slaHours} />
         )}

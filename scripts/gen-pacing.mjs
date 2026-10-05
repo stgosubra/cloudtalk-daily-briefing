@@ -65,6 +65,29 @@ function reconcile(mod) {
     teamSqoDeals += a.sqoDeals || 0;
   }
 
+  // Optional day-grain series for the cumulative curve. When present, every
+  // entry must be shaped, and the series must re-add to the same totals as the
+  // per-SDR actuals - two routes to one number, forced to agree.
+  if (P.daily != null) {
+    if (!Array.isArray(P.daily)) throw new Error("daily must be an array when present");
+    let dSql = 0, dSqo = 0;
+    for (const [i, d] of P.daily.entries()) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date || "")) {
+        throw new Error(`daily[${i}].date must be YYYY-MM-DD`);
+      }
+      if (typeof d.sqlMrr !== "number" || typeof d.sqoMrr !== "number") {
+        throw new Error(`daily[${i}] needs numeric sqlMrr and sqoMrr`);
+      }
+      dSql += d.sqlMrr; dSqo += d.sqoMrr;
+    }
+    if (Math.abs(dSql - teamSql) > 0.01) {
+      throw new Error(`daily SQL sum ${dSql} != actuals sum ${teamSql}`);
+    }
+    if (Math.abs(dSqo - teamSqo) > 0.01) {
+      throw new Error(`daily SQO sum ${dSqo} != actuals sum ${teamSqo}`);
+    }
+  }
+
   // Verify rollups if present
   if (P.rollups) {
     const t = P.rollups.team;

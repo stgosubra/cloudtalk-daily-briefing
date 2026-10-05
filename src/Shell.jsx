@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { C, R, SHADOW, T, TRACK, FONT_SANS, FONT_MONO, FONT_DISPLAY } from "./lib/tokens.js";
 import { PROFILE } from "./config.js";
 import { MODULES } from "./lib/modules.js";
+import { CloudTalkBadge } from "./design/brand.jsx";
 import { staleModules, declaredGaps } from "./lib/freshness.js";
 
 import DashboardModule from "./modules/dashboard/index.jsx";
@@ -113,18 +114,15 @@ export default function Shell() {
         <div style={{
           padding: collapsed ? "18px 0" : "18px 16px",
           display: "flex",
+          flexDirection: collapsed ? "column" : "row",
           alignItems: "center",
           justifyContent: collapsed ? "center" : "space-between",
-          gap: 8,
+          gap: collapsed ? 12 : 8,
         }}>
+          {collapsed && <CloudTalkBadge size={28} radius={R.md} />}
           {!collapsed && (
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div style={{
-                width: 28, height: 28, borderRadius: R.md, flexShrink: 0,
-                background: `linear-gradient(140deg, ${C.purple}, ${C.blue})`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontFamily: FONT_DISPLAY, fontSize: 13, fontWeight: 700, color: "#fff",
-              }}>C</div>
+              <CloudTalkBadge size={28} radius={R.md} />
               <div style={{ lineHeight: 1.25 }}>
                 <div style={{
                   fontFamily: FONT_DISPLAY, fontSize: T.body, fontWeight: 600,
@@ -424,7 +422,7 @@ function CommandPalette({ nav, activeId, onSelect, onClose }) {
       onMouseDown={onClose}
       style={{
         position: "fixed", inset: 0, zIndex: 200,
-        background: "rgba(5,5,8,0.66)", backdropFilter: "blur(4px)",
+        background: "rgba(8,5,14,0.72)", backdropFilter: "blur(4px)",
         display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "12vh",
       }}
     >

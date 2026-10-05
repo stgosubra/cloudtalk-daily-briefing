@@ -6,64 +6,88 @@
 // changed the canvas colour, which made one app look like three. Nothing may
 // define a colour outside this file.
 //
-// Palette direction: neutral canvas with a single faint ambient gradient. Colour
-// is spent on state, not decoration - see SEMANTIC below for why that matters.
+// Palette direction: warm charcoal canvas lit by a magenta/violet ambient, with
+// translucent card surfaces that carry a lit top edge. Depth comes from layered
+// translucency rather than flat fills.
+//
+// Colour is still spent on state, not decoration - see SEMANTIC below. The
+// ambient is deliberately kept under 0.10 alpha and pushed to the page margins so
+// it never sits behind a number: a tinted field under red and amber is exactly
+// how an alert stops reading as an alert.
 
 // ---------------------------------------------------------------------------
 // Canvas and surfaces
 // ---------------------------------------------------------------------------
-// The canvas carries one very low-opacity indigo wash at the top. It reads as
-// depth without tinting the field that red and amber alerts sit on; a saturated
-// canvas (the glass/magenta direction) drags alert contrast down exactly where
-// the app most needs it loud.
-const CANVAS = "#0A0A0C";
+const CANVAS = "#0B0910";
 
 export const C = {
   bg: CANVAS,
-  bgGlow: `radial-gradient(1200px 520px at 50% -20%, rgba(99,102,241,0.07), transparent 65%), ${CANVAS}`,
+  // Three washes, all off-centre: fuchsia bleeding from the top-left, violet
+  // answering from the right, and a deep plum floor. Together they give the
+  // canvas a direction of light, which is the single biggest difference between
+  // "dark theme" and "looks expensive".
+  // Positions are tuned to the content column, not the viewport - the rail
+  // occupies the first ~15% and a wash centred there is a wash nobody sees.
+  bgGlow: [
+    "radial-gradient(1100px 620px at 26% -8%, rgba(217,70,239,0.20), transparent 62%)",
+    "radial-gradient(1000px 560px at 82% 2%, rgba(124,58,237,0.17), transparent 64%)",
+    "radial-gradient(1400px 900px at 55% 112%, rgba(91,33,182,0.14), transparent 70%)",
+    CANVAS,
+  ].join(", "),
 
   // Solid surfaces - rail, popovers, anything that must occlude what is behind it.
-  surface: "#111115",
-  surfaceAlt: "#17171b",
+  surface: "#100D16",
+  surfaceAlt: "#17131F",
 
-  // Card fill. A faint diagonal gradient instead of a flat block: it is where the
-  // "lifted" feel comes from, and unlike a translucent glass fill it does not
-  // wash out a coloured dot painted on top of it.
-  cardBg: "linear-gradient(150deg, rgba(28,28,34,0.50), rgba(18,18,22,0.30))",
-  cardBgHover: "linear-gradient(150deg, rgba(34,34,41,0.62), rgba(22,22,27,0.38))",
+  // Card fill. Translucent and warm so the ambient reads through it, with the lit
+  // top edge supplied by SHADOW.card's inset rather than a second border.
+  cardBg: "linear-gradient(152deg, rgba(58,44,78,0.40), rgba(22,17,32,0.26))",
+  cardBgHover: "linear-gradient(152deg, rgba(74,56,98,0.52), rgba(28,22,40,0.34))",
   // Recessed track - segmented toggles, progress rails, input wells.
-  wellBg: "rgba(23,23,27,0.70)",
+  wellBg: "rgba(14,11,20,0.72)",
 
-  border: "rgba(44,44,52,0.55)",
-  borderStrong: "rgba(68,68,78,0.90)",
-  borderHover: "rgba(90,90,102,0.95)",
+  border: "rgba(142,116,180,0.18)",
+  borderStrong: "rgba(165,140,205,0.34)",
+  borderHover: "rgba(190,165,230,0.46)",
   // Row dividers sit lighter than card borders so a list inside a card does not
   // read as a stack of boxes.
-  divider: "rgba(44,44,52,0.45)",
+  divider: "rgba(142,116,180,0.14)",
+
+  // Bloom - the violet/fuchsia light used behind active and primary elements.
+  // Not a module accent and never a state; purely the glow of the chrome.
+  bloom: "#C084FC",
+  bloomBg: "rgba(192,132,252,0.14)",
+  bloomBorder: "rgba(192,132,252,0.34)",
+  bloomGlow: "0 0 0 1px rgba(192,132,252,0.22), 0 8px 28px -10px rgba(192,132,252,0.55)",
 
   // ---------------------------------------------------------------------------
   // Text ramp
   // ---------------------------------------------------------------------------
-  text: "#fafafa",
-  textMid: "#d4d4d8",
-  textMuted: "#a5a5ad",
-  textHint: "#77777f",
-  textFaint: "#55555d",
+  // Warmed a few degrees toward lavender so the ramp sits on the plum canvas
+  // rather than on top of it. Pure neutral greys read faintly green here.
+  text: "#F7F4FB",
+  textMid: "#D3CBE2",
+  textMuted: "#A79DBC",
+  textHint: "#7B7194",
+  textFaint: "#5A5272",
 
   // ---------------------------------------------------------------------------
   // Module accents - identity only, never state
   // ---------------------------------------------------------------------------
   // Each is a trio: fill / tint background / border. Mapped to modules in
   // lib/modules.js. A module keeps its accent whatever is happening inside it.
-  blue:    "#3b82f6", blueBg:    "rgba(59,130,246,0.12)",  blueBorder:    "rgba(59,130,246,0.24)",
-  emerald: "#10b981", emeraldBg: "rgba(16,185,129,0.12)",  emeraldBorder: "rgba(16,185,129,0.24)",
-  meet:    "#34d399", meetBg:    "rgba(52,211,153,0.12)",  meetBorder:    "rgba(52,211,153,0.24)",
-  orange:  "#f97316", orangeBg:  "rgba(249,115,22,0.12)",  orangeBorder:  "rgba(249,115,22,0.24)",
-  purple:  "#8b5cf6", purpleBg:  "rgba(139,92,246,0.12)",  purpleBorder:  "rgba(139,92,246,0.24)",
-  cyan:    "#22d3ee", cyanBg:    "rgba(34,211,238,0.12)",  cyanBorder:    "rgba(34,211,238,0.24)",
-  amber:   "#f59e0b", amberBg:   "rgba(245,158,11,0.12)",  amberBorder:   "rgba(245,158,11,0.24)",
-  red:     "#ef4444", redBg:     "rgba(239,68,68,0.12)",   redBorder:     "rgba(239,68,68,0.24)",
-  neutral: "#52525b", neutralBg: "rgba(82,82,91,0.12)",    neutralBorder: "rgba(82,82,91,0.28)",
+// Each sits a step brighter than the neutral-canvas set it replaces. A mid-
+// saturation hue that read fine on near-black goes muddy over a plum ambient,
+// and a state colour that has gone muddy has stopped doing its job.
+  blue:    "#5B9DFF", blueBg:    "rgba(91,157,255,0.14)",  blueBorder:    "rgba(91,157,255,0.30)",
+  emerald: "#2DD4A7", emeraldBg: "rgba(45,212,167,0.14)",  emeraldBorder: "rgba(45,212,167,0.30)",
+  meet:    "#4ADE9B", meetBg:    "rgba(74,222,155,0.14)",  meetBorder:    "rgba(74,222,155,0.30)",
+  orange:  "#FF8A3D", orangeBg:  "rgba(255,138,61,0.14)",  orangeBorder:  "rgba(255,138,61,0.30)",
+  purple:  "#A78BFA", purpleBg:  "rgba(167,139,250,0.14)", purpleBorder:  "rgba(167,139,250,0.30)",
+  cyan:    "#38E0F0", cyanBg:    "rgba(56,224,240,0.14)",  cyanBorder:    "rgba(56,224,240,0.30)",
+  amber:   "#FBBF24", amberBg:   "rgba(251,191,36,0.14)",  amberBorder:   "rgba(251,191,36,0.30)",
+  red:     "#FB5E6D", redBg:     "rgba(251,94,109,0.14)",  redBorder:     "rgba(251,94,109,0.30)",
+  neutral: "#6B6383", neutralBg: "rgba(107,99,131,0.14)",  neutralBorder: "rgba(107,99,131,0.32)",
 };
 
 // ---------------------------------------------------------------------------
@@ -103,10 +127,14 @@ export const R = {
   pill: 999,
 };
 
+// The leading `inset` on the card shadows is the glass edge - a one-pixel lit
+// line along the top of every card. It is what makes a translucent surface read
+// as a pane of something rather than as a hole in the page, and because Card
+// already consumes SHADOW.card every module inherits it with no edit.
 export const SHADOW = {
-  card: "0 1px 2px rgba(0,0,0,0.30), 0 8px 24px -12px rgba(0,0,0,0.55)",
-  cardHover: "0 1px 2px rgba(0,0,0,0.35), 0 14px 34px -14px rgba(0,0,0,0.65)",
-  pop: "0 24px 70px rgba(0,0,0,0.60)",
+  card: "inset 0 1px 0 rgba(255,255,255,0.055), 0 1px 2px rgba(0,0,0,0.38), 0 10px 32px -14px rgba(0,0,0,0.70)",
+  cardHover: "inset 0 1px 0 rgba(255,255,255,0.085), 0 1px 2px rgba(0,0,0,0.42), 0 18px 44px -16px rgba(0,0,0,0.78)",
+  pop: "inset 0 1px 0 rgba(255,255,255,0.07), 0 28px 80px rgba(0,0,0,0.70)",
 };
 
 // ---------------------------------------------------------------------------

@@ -7,8 +7,9 @@
 //
 // Card enforces that structurally: see NestContext below.
 
-import { createContext, useContext, useState } from "react";
+import { Children, createContext, useContext, useState } from "react";
 import { C, SEMANTIC, R, SHADOW, T, TRACK, NUM, FONT_SANS, FONT_MONO } from "../lib/tokens.js";
+import { CountUp, Reveal, useMountProgress } from "./viz.jsx";
 
 // ---------------------------------------------------------------------------
 // Card
@@ -108,7 +109,10 @@ export function Stat({ label, value, of, note, noteLevel, size = "hero", right, 
         color: C.text,
         ...NUM,
       }}>
-        {value}
+        {/* A bare number counts up; anything pre-formatted (€1,933, "47%", MASK)
+            is rendered as given. Callers that want an animated currency figure
+            pass a CountUp with its own formatter. */}
+        {typeof value === "number" ? <CountUp value={value} /> : value}
         {of != null && <span style={{ fontSize: Math.round(fs * 0.47), color: C.textFaint }}>/{of}</span>}
       </div>
       {note && (
@@ -283,24 +287,43 @@ export function TabBar({ tabs, value, onChange, size = "md", style }) {
 // ---------------------------------------------------------------------------
 // ProgressBar
 // ---------------------------------------------------------------------------
-export function ProgressBar({ pct, level = "ok", color, height = 4, marker, style }) {
+// A bullet chart, not a progress bar: three facts on one line, compared by
+// position rather than in your head.
+//   the track  = the full target
+//   the shade  = the share of the period already spent
+//   the bar    = actual
+//   the tick   = where you should be by now (`marker`)
+// Sweeps in once on mount, then holds - see the motion doctrine in viz.jsx.
+export function ProgressBar({ pct, level = "ok", color, height = 4, marker, delay = 0, style }) {
+  const p = useMountProgress(850, delay);
   const v = Math.max(0, Math.min(100, pct ?? 0));
+  const m = marker == null ? null : Math.max(0, Math.min(100, marker));
   const fill = color || SEMANTIC[level].fill;
   return (
     <div style={{
+      // A light overlay, not the well token: on a translucent card a near-black
+      // track vanishes, and a bar you cannot see the end of is not a measurement.
       position: "relative", height, borderRadius: R.pill,
-      background: C.wellBg, overflow: "visible", ...style,
+      background: "rgba(255,255,255,0.07)", overflow: "visible", ...style,
     }}>
+      {m != null && (
+        <div style={{
+          position: "absolute", left: 0, top: 0, bottom: 0, width: `${m}%`,
+          borderRadius: R.pill, background: "rgba(255,255,255,0.05)",
+        }} />
+      )}
       <div style={{
-        width: `${v}%`, height: "100%", borderRadius: R.pill,
-        background: fill, transition: "width 240ms ease",
+        position: "absolute", left: 0, top: 0, bottom: 0,
+        width: `${v * p}%`, borderRadius: R.pill,
+        background: `linear-gradient(90deg, ${fill}99, ${fill})`,
+        boxShadow: `0 0 10px -2px ${fill}aa`,
       }} />
-      {marker != null && (
+      {m != null && (
         <div
           title={`target ${marker}%`}
           style={{
-            position: "absolute", left: `${Math.max(0, Math.min(100, marker))}%`, top: -2,
-            width: 1.5, height: height + 4, background: C.textMuted, borderRadius: 1,
+            position: "absolute", left: `${m}%`, top: -2,
+            width: 1.5, height: height + 4, background: C.textMid, borderRadius: 1,
           }}
         />
       )}
@@ -361,6 +384,10 @@ export function PageHeader({ num, title, sub, right, style }) {
 }
 
 // Page frame - every module's outer wrapper, so padding and max width are set once.
+// Page also owns the entry choreography: each top-level section fades and rises
+// in sequence. Doing it here rather than per module means a module gets the
+// motion by existing, and there is one place to tune the rhythm - the same
+// reason Card owns the shadow.
 export function Page({ children, style }) {
   return (
     <div style={{
@@ -370,7 +397,9 @@ export function Page({ children, style }) {
       fontFamily: FONT_SANS,
       ...style,
     }}>
-      {children}
+      {Children.map(children, (child, i) =>
+        child == null ? child : <Reveal index={i}>{child}</Reveal>
+      )}
     </div>
   );
 }

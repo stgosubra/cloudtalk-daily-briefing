@@ -5,6 +5,7 @@ import {
   Page, PageHeader, Card, SectionLabel, Stat, StatRow, StatusDot,
   Badge, DataList, DataRow, AreaChart, Empty,
 } from "../../design/ui.jsx";
+import { Gauge, FunnelFlow, CountUp, Sparkline } from "../../design/viz.jsx";
 import { C, R, T, TRACK, NUM, SEMANTIC, FONT_SANS, FONT_MONO } from "../../lib/tokens.js";
 
 // Module 04 - Performance. One question: am I going to hit quota this month,
@@ -20,74 +21,30 @@ const MASK = "•••";
 const eur = (n) => "€" + Math.round(n).toLocaleString("en-US");
 
 // ---------------------------------------------------------------------------
-// Gauge - semicircular attainment dial
+// Attainment dial
 // ---------------------------------------------------------------------------
-// Drawn with pathLength="1" so the fill fraction is the dash length directly -
-// no arc-length trigonometry, and it stays correct if the radius ever changes.
-function polar(cx, cy, r, deg) {
-  const a = (deg * Math.PI) / 180;
-  return [cx + r * Math.cos(a), cy - r * Math.sin(a)];
-}
-function arcPath(cx, cy, r, startDeg, endDeg) {
-  const [x1, y1] = polar(cx, cy, r, startDeg);
-  const [x2, y2] = polar(cx, cy, r, endDeg);
-  const large = Math.abs(endDeg - startDeg) > 180 ? 1 : 0;
-  const sweep = endDeg < startDeg ? 1 : 0;
-  return `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${r} ${r} 0 ${large} ${sweep} ${x2.toFixed(2)} ${y2.toFixed(2)}`;
-}
-
-function Gauge({ earned, target, pacePct, masked }) {
-  const pct = target > 0 ? earned / target : 0;
-  const fill = Math.min(Math.max(pct, 0), 1);
-  // Colour tracks pace, not raw attainment: 40% of quota on day 4 is fine, the
-  // same 40% on day 18 is not. `pacePct` carries that context.
+// Thin wrapper over the shared Gauge: this module's only job is deciding what
+// the dial means. Colour tracks pace, not raw attainment - 40% of quota on day
+// 4 is fine, the same 40% on day 18 is not - so `pacePct` carries that context
+// and `markerPct` plants the tick you are racing.
+function AttainmentDial({ earned, target, pacePct, expected, masked }) {
+  const pct = target > 0 ? (earned / target) * 100 : 0;
   const level = pacePct == null ? "idle" : pacePct >= 100 ? "ok" : pacePct >= 80 ? "warn" : "risk";
-  const tone = SEMANTIC[level];
-
-  const W = 290, H = 162, cx = 145, cy = 145, r = 116;
-  const track = arcPath(cx, cy, r, 180, 0);
-  // Where the month *should* be by now - the tick you are racing.
-  const expectedFrac = pacePct != null && pacePct > 0 ? Math.min(fill / (pacePct / 100), 1) : null;
-  const tickDeg = expectedFrac == null ? null : 180 - expectedFrac * 180;
-  const tickIn = tickDeg == null ? null : polar(cx, cy, r - 13, tickDeg);
-  const tickOut = tickDeg == null ? null : polar(cx, cy, r + 13, tickDeg);
-
   return (
-    <div style={{ position: "relative", width: W, height: H }}>
-      <svg width={W} height={H} style={{ display: "block", overflow: "visible" }}>
-        <defs>
-          <linearGradient id="gaugeFill" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor={tone.fill} stopOpacity="0.45" />
-            <stop offset="100%" stopColor={tone.fill} stopOpacity="1" />
-          </linearGradient>
-        </defs>
-        {/* The empty track has to read against the card gradient, so it is a
-            light overlay rather than a surface token - a dark-on-dark track
-            disappears and leaves the fill floating with nothing to measure
-            it against. */}
-        <path d={track} fill="none" stroke="rgba(255,255,255,0.065)" strokeWidth="15" strokeLinecap="round" />
-        <path d={track} pathLength="1" fill="none" stroke="url(#gaugeFill)"
-              strokeWidth="15" strokeLinecap="round" strokeDasharray={`${fill.toFixed(4)} 1`} />
-        {tickIn && (
-          <line x1={tickIn[0]} y1={tickIn[1]} x2={tickOut[0]} y2={tickOut[1]}
-                stroke={C.textHint} strokeWidth="1.5" strokeLinecap="round" />
-        )}
-      </svg>
-
-      <div style={{ position: "absolute", top: 66, left: 0, right: 0, textAlign: "center" }}>
-        <div style={{ font: `600 42px/1 ${FONT_SANS}`, color: tone.fill, letterSpacing: TRACK.tightest, ...NUM }}>
-          {Math.round(pct * 100)}%
-        </div>
-        <div style={{ font: `400 ${T.micro}px/1 ${FONT_MONO}`, color: C.textMuted, marginTop: 8, ...NUM }}>
-          {earned} / {masked ? MASK : target} pts
-        </div>
+    <Gauge
+      pct={pct}
+      level={level}
+      size={212}
+      thickness={15}
+      markerPct={target > 0 ? (expected / target) * 100 : null}
+    >
+      <div style={{ font: `600 ${T.heroLg}px/1 ${FONT_SANS}`, color: SEMANTIC[level].fill, letterSpacing: TRACK.tightest, ...NUM }}>
+        <CountUp value={pct} duration={1100} format={(v) => `${Math.round(v)}%`} />
       </div>
-
-      <div style={{ position: "absolute", bottom: -2, left: 2, font: `400 ${T.label}px/1 ${FONT_MONO}`, color: C.textFaint }}>0</div>
-      <div style={{ position: "absolute", bottom: -2, right: 2, font: `400 ${T.label}px/1 ${FONT_MONO}`, color: C.textFaint }}>
-        {masked ? MASK : target}
+      <div style={{ font: `400 ${T.micro}px/1 ${FONT_MONO}`, color: C.textMuted, marginTop: 8, ...NUM }}>
+        {earned} / {masked ? MASK : target} pts
       </div>
-    </div>
+    </Gauge>
   );
 }
 
@@ -267,6 +224,21 @@ export default function PerformanceModule() {
     .filter((s) => s.ageH >= 24);
   const stalledPts = stalls.reduce((a, s) => a + s.points, 0);
 
+  // Year-to-date funnel. Taken from the reconciled rollups rather than re-summed
+  // from the per-seat blocks - two routes to the same number is two numbers.
+  const fn = p.mqlToSql, sw = p.sqoToWonYtd;
+  const funnelStages = fn && sw ? [
+    { label: "MQL", value: fn.mqlContacts },
+    { label: "SQL", value: fn.sqlContacts },
+    { label: "SQO", value: sw.sqo },
+    { label: "Won", value: sw.won },
+  ] : null;
+  // Monthly MQL volume behind the top of that funnel - the trend the ratios sit on.
+  const mqlTrend = Object.entries(p.funnel?.mql || {})
+    .filter(([k]) => k !== "ytd")
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, v]) => v);
+
   const ytd = p.points.reduce((a, m) => a + m.points, 0);
   const series = p.points.map((m) => ({ x: m.label, y: m.points }));
   const targetLine = p.points.map((m) => ({ x: m.label, y: target }));
@@ -314,7 +286,7 @@ export default function PerformanceModule() {
       <div style={{ display: "grid", gridTemplateColumns: "minmax(330px, 0.85fr) 1fr", gap: 18, marginTop: 22 }}>
         <Card title="Month attainment" right={<SectionLabel>vs pace</SectionLabel>}>
           <div style={{ display: "flex", justifyContent: "center", paddingTop: 6 }}>
-            <Gauge earned={earned} target={target} pacePct={pacePct} masked={masked} />
+            <AttainmentDial earned={earned} target={target} pacePct={pacePct} expected={expected} masked={masked} />
           </div>
           <div style={{
             marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.divider}`,
@@ -358,6 +330,25 @@ export default function PerformanceModule() {
           </div>
         </Card>
       </div>
+
+      {funnelStages && (
+        <Card
+          title="Pipeline funnel · year to date"
+          right={
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <SectionLabel>MQL / month</SectionLabel>
+              <Sparkline points={mqlTrend} color={C.bloom} width={88} height={22} delay={200} />
+            </div>
+          }
+          style={{ marginTop: 18 }}
+        >
+          <FunnelFlow stages={funnelStages} height={170} format={(v) => Math.round(v).toLocaleString("en-US")} />
+          <div style={{ font: `400 ${T.micro}px/1.6 ${FONT_SANS}`, color: C.textHint, marginTop: 12 }}>
+            Band height is volume, so the taper is the loss. {fn.ratePct}% of MQLs reach SQL;{" "}
+            {Math.round((sw.won / fn.mqlContacts) * 100)}% of them end up won.
+          </div>
+        </Card>
+      )}
 
       <Card
         title="Stall alerts"

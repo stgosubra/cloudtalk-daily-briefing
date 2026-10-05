@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { C, SHADOW } from "../../lib/tokens.js";
 
 // Module 03 - CloudTalk Minutes Calculator.
 // Ported from the standalone HTML/vanilla-JS abacus tool into a React module.
@@ -266,20 +267,21 @@ export default function MinutesCalc() {
 
 const CSS = `
 .mcalc{
-  /* Repointed onto the design tokens in src/lib/tokens.js. The names are kept
-     (--acc, --glow, ...) because ~70 rules below reference them; only the
-     values move, so the tool inherits the shared canvas without a rewrite. */
-  --bg:#0A0A0C;--bg2:#111115;
-  --surf:rgba(28,28,34,0.50);--surf2:rgba(23,23,27,0.70);
-  --bdr:rgba(44,44,52,0.55);--bdr2:rgba(68,68,78,0.90);--bdr3:rgba(59,130,246,0.45);
-  --acc:#3b82f6;--acc2:#60a5fa;--acc3:rgba(59,130,246,0.12);--glow:rgba(59,130,246,0.18);
-  --txt:#fafafa;--muted:#a5a5ad;--muted2:#77777f;
+  /* Interpolated from src/lib/tokens.js, not copied from it. The variable names
+     are kept (--acc, --glow, ...) because ~70 rules below reference them; only
+     the values move. An earlier pass pasted the token values in as literals,
+     which looked token-backed and silently froze the module at the old palette. */
+  --bg:${C.bg};--bg2:${C.surface};
+  --surf:${C.surfaceAlt};--surf2:${C.wellBg};
+  --bdr:${C.border};--bdr2:${C.borderStrong};--bdr3:${C.blueBorder};
+  --acc:${C.blue};--acc2:${C.cyan};--acc3:${C.blueBg};--glow:${C.bloomBg};
+  --txt:${C.text};--muted:${C.textMuted};--muted2:${C.textHint};
   height:100%;overflow-y:auto;background:transparent;color:var(--txt);
   font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;
 }
 .mcalc *{box-sizing:border-box}
-.mcalc .app{width:100%;max-width:860px;background:linear-gradient(150deg,rgba(28,28,34,0.50),rgba(18,18,22,0.30));border-radius:16px;overflow:hidden;border:1px solid var(--bdr);display:flex;flex-direction:column;box-shadow:0 1px 2px rgba(0,0,0,0.30),0 8px 24px -12px rgba(0,0,0,0.55)}
+.mcalc .app{width:100%;max-width:860px;background:${C.cardBg};border-radius:16px;overflow:hidden;border:1px solid var(--bdr);display:flex;flex-direction:column;box-shadow:${SHADOW.card}}
 .mcalc .topbar{display:flex;align-items:center;gap:13px;padding:14px 22px;background:var(--surf2);border-bottom:1px solid var(--bdr);backdrop-filter:blur(24px)}
 .mcalc .logo-wrap{width:38px;height:38px;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--acc);flex-shrink:0}
 .mcalc .logo-wrap svg{width:30px;height:30px}

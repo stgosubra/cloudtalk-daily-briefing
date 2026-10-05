@@ -51,5 +51,6 @@ export const OWNER_IDS = {};
 
 export const hsContactUrl = (id) =>
   `https://app.hubspot.com/contacts/${PORTAL_ID}/record/0-1/${id}`;
+// 0-1 contact, 0-2 company, 0-3 deal.
 export const hsDealUrl = (id) =>
-  `https://app.hubspot.com/contacts/${PORTAL_ID}/record/0-2/${id}`;
+  `https://app.hubspot.com/contacts/${PORTAL_ID}/record/0-3/${id}`;

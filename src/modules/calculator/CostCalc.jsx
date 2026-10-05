@@ -144,23 +144,23 @@ function CountrySelect({ value, onChange, exclude = [] }) {
         style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "9px 12px", background: "transparent", border: `1px solid ${LINE}`, borderRadius: 10, cursor: "pointer", textAlign: "left" }}>
         <span style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
           <span style={{ fontWeight: 500, color: TXT, fontSize: 13.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{value}</span>
-          <span style={{ fontSize: 10, fontWeight: 500, padding: "2px 7px", borderRadius: 20, flexShrink: 0, background: region === "EEA" ? "rgba(77,124,254,.15)" : "rgba(245,180,80,.13)", color: region === "EEA" ? "#9DB6FF" : "#E8B777" }}>{region}</span>
+          <span style={{ fontSize: 10, fontWeight: 500, padding: "2px 7px", borderRadius: 20, flexShrink: 0, background: region === "EEA" ? "rgba(91,157,255,.15)" : "rgba(251,191,36,.13)", color: region === "EEA" ? C.blue : C.amber }}>{region}</span>
         </span>
         <ChevronDown size={14} color={FAINT} style={{ flexShrink: 0 }} />
       </button>
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
-          <div style={{ position: "absolute", zIndex: 50, marginTop: 5, width: "100%", borderRadius: 10, border: "1px solid rgba(255,255,255,0.12)", overflow: "hidden", background: "#1C2029", boxShadow: "0 24px 60px rgba(0,0,0,.65)" }}>
+          <div style={{ position: "absolute", zIndex: 50, marginTop: 5, width: "100%", borderRadius: 10, border: "1px solid rgba(255,255,255,0.12)", overflow: "hidden", background: C.surfaceAlt, boxShadow: "0 24px 60px rgba(0,0,0,.65)" }}>
             <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…"
-              style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderBottom: `1px solid ${LINE}`, fontSize: 13, color: TXT, outline: "none", background: "#1C2029", border: "none", borderBottomStyle: "solid", borderBottomWidth: 1, borderBottomColor: LINE }} />
+              style={{ width: "100%", boxSizing: "border-box", padding: "10px 12px", borderBottom: `1px solid ${LINE}`, fontSize: 13, color: TXT, outline: "none", background: C.surfaceAlt, border: "none", borderBottomStyle: "solid", borderBottomWidth: 1, borderBottomColor: LINE }} />
             <div style={{ maxHeight: 200, overflowY: "auto" }}>
               {filtered.map((c) => (
                 <button key={c.name} onClick={() => { onChange(c.name); setOpen(false); setQ(""); }}
-                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", fontSize: 13, textAlign: "left", background: "#1C2029", border: "none", cursor: "pointer", color: TXT }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "#252A35")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "#1C2029")}>
-                  <span style={{ color: "#C9CDD6" }}>{c.name}</span>
+                  style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "9px 12px", fontSize: 13, textAlign: "left", background: C.surfaceAlt, border: "none", cursor: "pointer", color: TXT }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = C.wellBg)}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = C.surfaceAlt)}>
+                  <span style={{ color: C.textMid }}>{c.name}</span>
                   {value === c.name && <Check size={13} color={BLUE} />}
                 </button>
               ))}
@@ -301,8 +301,8 @@ export default function CostCalc() {
       (b) => b.mobileLandline.includes(r.country) || b.landlineOnly.includes(r.country)
     )
   );
-  const ORANGE = "#F5A84A";
-  const RED    = "#E05F5A";
+  const ORANGE = C.amber;
+  const RED    = C.red;
 
   const inputSt = {
     width: "100%", boxSizing: "border-box", padding: "8px 10px",
@@ -349,9 +349,9 @@ export default function CostCalc() {
                     <button key={label} onClick={() => setOriginEEA(val)}
                       style={{
                         padding: "6px 13px", borderRadius: 9, fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all .15s",
-                        background: on ? (val ? "rgba(77,124,254,.15)" : "rgba(245,180,80,.13)") : "transparent",
-                        border: `1px solid ${on ? (val ? "rgba(77,124,254,.38)" : "rgba(245,180,80,.35)") : LINE}`,
-                        color: on ? (val ? "#9DB6FF" : "#E8B777") : MUT,
+                        background: on ? (val ? "rgba(91,157,255,.15)" : "rgba(251,191,36,.13)") : "transparent",
+                        border: `1px solid ${on ? (val ? "rgba(91,157,255,.38)" : "rgba(251,191,36,.35)") : LINE}`,
+                        color: on ? (val ? C.blue : C.amber) : MUT,
                       }}>
                       {label}
                     </button>
@@ -367,7 +367,7 @@ export default function CostCalc() {
                   <Globe size={12} />Destinations
                 </span>
                 <button onClick={addRow}
-                  style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 11px", borderRadius: 8, fontSize: 12, fontWeight: 500, color: BLUE, background: "rgba(77,124,254,.1)", border: "1px solid rgba(77,124,254,.2)", cursor: "pointer" }}>
+                  style={{ display: "flex", alignItems: "center", gap: 5, padding: "5px 11px", borderRadius: 8, fontSize: 12, fontWeight: 500, color: BLUE, background: "rgba(91,157,255,.1)", border: "1px solid rgba(91,157,255,.2)", cursor: "pointer" }}>
                   <Plus size={12} />Add country
                 </button>
               </div>
@@ -385,7 +385,7 @@ export default function CostCalc() {
                         {rows.length > 1 && (
                           <button onClick={() => removeRow(r.id)}
                             style={{ padding: 7, borderRadius: 8, color: FAINT, background: "transparent", border: "none", cursor: "pointer", display: "flex", flexShrink: 0 }}
-                            onMouseEnter={(e) => e.currentTarget.style.color = "#E2554F"}
+                            onMouseEnter={(e) => e.currentTarget.style.color = C.red}
                             onMouseLeave={(e) => e.currentTarget.style.color = FAINT}>
                             <X size={14} />
                           </button>
@@ -430,11 +430,11 @@ export default function CostCalc() {
 
               {/* Team size - appears when any row is across-team */}
               {anyAcrossTeam && (
-                <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 10, background: "rgba(77,124,254,.06)", border: "1px solid rgba(77,124,254,.18)" }}>
-                  <label style={{ ...lbl, color: "#9DB6FF" }}>Team size (agents)</label>
+                <div style={{ marginTop: 12, padding: "12px 14px", borderRadius: 10, background: "rgba(91,157,255,.06)", border: "1px solid rgba(91,157,255,.18)" }}>
+                  <label style={{ ...lbl, color: C.blue }}>Team size (agents)</label>
                   <input type="number" min={1} value={teamSize}
                     onChange={(e) => setTeamSize(e.target.value)}
-                    style={{ ...inputSt, border: "1px solid rgba(77,124,254,.28)", color: TXT }} />
+                    style={{ ...inputSt, border: "1px solid rgba(91,157,255,.28)", color: TXT }} />
                 </div>
               )}
             </section>
@@ -459,8 +459,8 @@ export default function CostCalc() {
                       onClick={() => setActiveBundle(isActive ? null : k)}
                       style={{
                         padding: "6px 12px", borderRadius: 8, fontSize: 12.5, fontWeight: 500, transition: "all .15s", cursor: "pointer",
-                        background: isActive ? BLUE : hinted ? "rgba(245,168,74,.12)" : "transparent",
-                        border: `1px solid ${isActive ? BLUE : hinted ? "rgba(245,168,74,.4)" : LINE}`,
+                        background: isActive ? BLUE : hinted ? "rgba(251,191,36,.12)" : "transparent",
+                        border: `1px solid ${isActive ? BLUE : hinted ? "rgba(251,191,36,.4)" : LINE}`,
                         color: isActive ? "#fff" : hinted ? ORANGE : MUT,
                       }}>
                       {b.name} · €{b.price}/seat
@@ -470,7 +470,7 @@ export default function CostCalc() {
                 {hasUncoveredCountry && (
                   <span style={{
                     padding: "6px 12px", borderRadius: 8, fontSize: 12.5, fontWeight: 500,
-                    background: "rgba(224,95,90,.12)", border: "1px solid rgba(224,95,90,.3)", color: RED,
+                    background: "rgba(251,94,109,.12)", border: "1px solid rgba(251,94,109,.3)", color: RED,
                   }}>
                     No bundle
                   </span>
@@ -493,15 +493,15 @@ export default function CostCalc() {
           <div style={{ position: "sticky", top: 28, display: "flex", flexDirection: "column", gap: 14 }}>
 
             {/* Net total hero */}
-            <div style={{ borderRadius: 13, padding: "13px 16px", border: "1px solid rgba(89,112,255,0.42)", background: "linear-gradient(135deg, rgba(89,112,255,0.16) 0%, rgba(89,112,255,0.05) 100%)", boxShadow: "0 0 22px rgba(89,112,255,0.13)" }}>
-              <p style={{ fontSize: 10, fontWeight: 500, color: "rgba(157,182,255,.85)", margin: 0, textTransform: "uppercase", letterSpacing: ".08em" }}>
+            <div style={{ borderRadius: 13, padding: "13px 16px", border: "1px solid rgba(91,157,255,0.42)", background: "linear-gradient(135deg, rgba(91,157,255,0.16) 0%, rgba(91,157,255,0.05) 100%)", boxShadow: "0 0 22px rgba(91,157,255,0.13)" }}>
+              <p style={{ fontSize: 10, fontWeight: 500, color: "rgba(91,157,255,.85)", margin: 0, textTransform: "uppercase", letterSpacing: ".08em" }}>
                 {activeBundle ? "Net total · after bundle" : "Estimated total"}
               </p>
               <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
-                <span style={{ fontSize: 26, fontWeight: 600, color: "#cdd9ff", letterSpacing: "-.02em" }}>{eur(computed.netTotal)}</span>
-                <span style={{ color: "rgba(157,182,255,.7)", fontSize: 13 }}>/ mo</span>
+                <span style={{ fontSize: 26, fontWeight: 600, color: C.blue, letterSpacing: "-.02em" }}>{eur(computed.netTotal)}</span>
+                <span style={{ color: "rgba(91,157,255,.7)", fontSize: 13 }}>/ mo</span>
                 {hasRefRows && (
-                  <span style={{ fontSize: 11, color: "rgba(157,182,255,.45)", marginLeft: 6 }}>· incl. reference rows</span>
+                  <span style={{ fontSize: 11, color: "rgba(91,157,255,.45)", marginLeft: 6 }}>· incl. reference rows</span>
                 )}
               </div>
               {activeBundle && computed.bundleSavings > 0 && (
@@ -531,7 +531,7 @@ export default function CostCalc() {
                           }
                         </p>
                         {r.covered && !strike && (
-                          <p style={{ fontSize: 11, color: "#E8B777", margin: "2px 0 0" }}>
+                          <p style={{ fontSize: 11, color: C.amber, margin: "2px 0 0" }}>
                             pool exceeded · partial PAYG applies
                           </p>
                         )}
@@ -558,15 +558,15 @@ export default function CostCalc() {
                     <div style={{ padding: "10px 12px", borderRadius: 9, background: "rgba(255,255,255,.022)", border: `1px solid ${LINE}` }}>
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, marginBottom: 6 }}>
                         <span style={{ color: MUT }}>Minute pool · {bundle.name}</span>
-                        <span style={{ color: over ? "#E8B777" : GREEN, fontVariantNumeric: "tabular-nums" }}>
+                        <span style={{ color: over ? C.amber : GREEN, fontVariantNumeric: "tabular-nums" }}>
                           {Math.round(computed.totalCoveredMins).toLocaleString()} / {computed.poolTotal.toLocaleString()} min
                         </span>
                       </div>
                       <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,.07)", overflow: "hidden" }}>
-                        <div style={{ height: "100%", width: `${pct}%`, borderRadius: 2, background: over ? "#E8B777" : GREEN, transition: "width .3s" }} />
+                        <div style={{ height: "100%", width: `${pct}%`, borderRadius: 2, background: over ? C.amber : GREEN, transition: "width .3s" }} />
                       </div>
                       {over && (
-                        <p style={{ fontSize: 11, color: "#E8B777", margin: "6px 0 0" }}>
+                        <p style={{ fontSize: 11, color: C.amber, margin: "6px 0 0" }}>
                           {Math.round(computed.poolOverage).toLocaleString()} min overage (FUP) · +{eur(computed.overageCost)} at blended PAYG rate
                         </p>
                       )}
@@ -576,12 +576,12 @@ export default function CostCalc() {
                           <div style={{ marginTop: 8 }}>
                             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11.5, marginBottom: 5 }}>
                               <span style={{ color: MUT }}>US & Canada pool</span>
-                              <span style={{ color: computed.isOverUsCanadaPool ? "#E8B777" : GREEN, fontVariantNumeric: "tabular-nums" }}>
+                              <span style={{ color: computed.isOverUsCanadaPool ? C.amber : GREEN, fontVariantNumeric: "tabular-nums" }}>
                                 {Math.round(computed.totalUsCanadaMins).toLocaleString()} / {computed.usCanadaPoolTotal.toLocaleString()} min
                               </span>
                             </div>
                             <div style={{ height: 4, borderRadius: 2, background: "rgba(255,255,255,.07)", overflow: "hidden" }}>
-                              <div style={{ height: "100%", width: `${uPct}%`, borderRadius: 2, background: computed.isOverUsCanadaPool ? "#E8B777" : GREEN, transition: "width .3s" }} />
+                              <div style={{ height: "100%", width: `${uPct}%`, borderRadius: 2, background: computed.isOverUsCanadaPool ? C.amber : GREEN, transition: "width .3s" }} />
                             </div>
                           </div>
                         );
@@ -614,16 +614,16 @@ export default function CostCalc() {
                 {/* Net */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <span style={{ fontSize: 15, fontWeight: 500 }}>Net / month</span>
-                  <span style={{ fontSize: 19, fontWeight: 600, color: "#9DB6FF" }}>{eur(computed.netTotal)}</span>
+                  <span style={{ fontSize: 19, fontWeight: 600, color: C.blue }}>{eur(computed.netTotal)}</span>
                 </div>
               </div>
             </div>
 
             {/* Intl warning */}
             {anyIntl && (
-              <div style={{ display: "flex", gap: 9, padding: 13, background: "rgba(245,180,80,.08)", borderRadius: 12, border: "1px solid rgba(245,180,80,.15)" }}>
-                <Info size={14} color="#E8B777" style={{ flexShrink: 0, marginTop: 1 }} />
-                <p style={{ fontSize: 12, color: "#D9B484", margin: 0, lineHeight: 1.5 }}>
+              <div style={{ display: "flex", gap: 9, padding: 13, background: C.amberBg, borderRadius: 12, border: `1px solid ${C.amberBorder}` }}>
+                <Info size={14} color={C.amber} style={{ flexShrink: 0, marginTop: 1 }} />
+                <p style={{ fontSize: 12, color: C.amber, margin: 0, lineHeight: 1.5 }}>
                   International rate applied - non-EEA number calling an EEA destination. Switch to an EEA-based number for the cheaper intra-EEA rate.
                 </p>
               </div>

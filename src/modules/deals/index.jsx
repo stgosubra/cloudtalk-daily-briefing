@@ -17,11 +17,13 @@ import { DEALS } from "./data.js";
 import {
   COLUMNS, OUTCOME_LEVEL, SEG_LABEL, SLA_HOURS, MONTHLY_TARGET_EUR,
 } from "../../deals.config.js";
+import { hsDealUrl } from "../../config.js";
 import {
   Page, PageHeader, Card, SectionLabel, Stat, StatRow, StatusDot, Badge, Glyph,
   DataList, DataRow, TabBar, ProgressBar, Empty,
 } from "../../design/ui.jsx";
-import { C, R, T, TRACK, NUM, SEMANTIC, FONT_SANS, FONT_MONO } from "../../lib/tokens.js";
+import { Ring } from "../../design/viz.jsx";
+import { C, R, T, TRACK, NUM, SEMANTIC, SHADOW, FONT_SANS, FONT_MONO } from "../../lib/tokens.js";
 
 // --------------------------------------------------------------------------
 // formatting
@@ -112,19 +114,40 @@ function DealCard({ d, slaHours, now }) {
   const level = breach ? "risk" : OUTCOME_LEVEL[d.outcome];
 
   return (
-    <div
+    <a
+      href={hsDealUrl(d.id)}
+      target="_blank"
+      rel="noreferrer"
+      title="Open deal in HubSpot"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
+        display: "block", textDecoration: "none", cursor: "pointer",
         background: hover ? "rgba(255,255,255,0.045)" : "rgba(255,255,255,0.022)",
-        border: `1px solid ${breach ? SEMANTIC.risk.border : C.border}`,
+        border: `1px solid ${breach ? SEMANTIC.risk.border : hover ? C.borderHover : C.border}`,
         borderRadius: R.lg,
         padding: 13,
-        transition: "background 120ms ease, border-color 120ms ease",
+        transform: hover ? "translateY(-1px)" : "translateY(0)",
+        boxShadow: hover ? SHADOW.card : "none",
+        transition: "background 120ms ease, border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease",
       }}
     >
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-        <Glyph level={level} size={28}>{initials(d.name)}</Glyph>
+        {/* A deal awaiting a ruling wears its own clock: the ring closes as the
+            SLA burns down, so the urgency is readable before the text under it.
+            Deals already decided have no clock left to run, so they get the
+            plain glyph. */}
+        {d.outcome === "pending" ? (
+          <span style={{ position: "relative", width: 38, height: 38, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <span style={{ position: "absolute", inset: 0 }}>
+              <Ring pct={(d.ageH / slaHours) * 100} level={breach ? "risk" : "warn"} size={38} thickness={2.5}
+                    label={`${Math.round((d.ageH / slaHours) * 100)}% of SLA elapsed`} />
+            </span>
+            <Glyph level={level} size={26}>{initials(d.name)}</Glyph>
+          </span>
+        ) : (
+          <Glyph level={level} size={28}>{initials(d.name)}</Glyph>
+        )}
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{
             font: `500 ${T.body}px/1.3 ${FONT_SANS}`,
@@ -170,15 +193,6 @@ function DealCard({ d, slaHours, now }) {
         </span>
       </div>
 
-      {d.outcome === "pending" && (
-        <ProgressBar
-          pct={(d.ageH / slaHours) * 100}
-          level={breach ? "risk" : "warn"}
-          height={3}
-          style={{ marginTop: 10 }}
-        />
-      )}
-
       {d.ns !== "ok" && (
         <div style={{ marginTop: 10 }}>
           <Badge level={d.ns === "noshow" ? "risk" : "warn"}>
@@ -186,7 +200,7 @@ function DealCard({ d, slaHours, now }) {
           </Badge>
         </div>
       )}
-    </div>
+    </a>
   );
 }
 
@@ -194,10 +208,11 @@ function DealCard({ d, slaHours, now }) {
 // Column
 // --------------------------------------------------------------------------
 
-function Column({ col, deals, slaHours, now }) {
+function Column({ col, deals, slaHours, now, totalAmt }) {
   const level = OUTCOME_LEVEL[col.id];
   const amt = sum(deals, (d) => d.amt);
   const breaches = deals.filter((d) => isBreaching(d, slaHours)).length;
+  const share = totalAmt > 0 ? (amt / totalAmt) * 100 : 0;
 
   return (
     <div style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
@@ -234,6 +249,16 @@ function Column({ col, deals, slaHours, now }) {
           {eur(amt)}
         </span>
       </div>
+
+      {/* This column's share of the month's MRR. Four of these side by side is
+          the answer to "where is the money sitting" without reading a figure. */}
+      <ProgressBar
+        pct={share}
+        level={breaches ? "risk" : level}
+        height={3}
+        delay={120}
+        style={{ marginBottom: 14 }}
+      />
 
       <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
         {deals.length === 0 ? (
@@ -405,6 +430,7 @@ export default function DealsModule() {
   const accepted = grouped.accepted || [];
   const acceptedAmt = sum(accepted, (d) => d.amt);
   const acceptedPts = sum(accepted, (d) => d.pts);
+  const totalAmt = sum(deals, (d) => d.amt);
   const breaching = deals.filter((d) => isBreaching(d, slaHours));
   const breachAmt = sum(breaching, (d) => d.amt);
   const pct = target ? (acceptedAmt / target) * 100 : 0;
@@ -496,6 +522,7 @@ export default function DealsModule() {
                   deals={grouped[col.id] || []}
                   slaHours={slaHours}
                   now={now}
+                  totalAmt={totalAmt}
                 />
               ))}
             </div>

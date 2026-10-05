@@ -111,7 +111,15 @@ function meetProvider(url) {
 // Circular monogram action button: futuristic, minimal, ≥36px tap target.
 // Used in ProspectCard's action row to replace rectangular HubSpot/Meet/Notes buttons.
 // `as="a"` for hrefs, plain button otherwise. Optional `count` shows a corner badge.
-function MonogramButton({ initials, color, ariaLabel, title, href, onClick, count, size = 38 }) {
+const PhoneIcon = ({ size = 15 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+  </svg>
+);
+
+// A circular action button. Normally carries 1-2 letters, but `glyph` swaps in an
+// icon node instead - a phone is a phone in every language, "PH" is a riddle.
+function MonogramButton({ initials, glyph, color, ariaLabel, title, href, onClick, count, size = 38 }) {
   const [hov, setHov] = useState(false);
   const [focus, setFocus] = useState(false);
   const glow = hov || focus;
@@ -120,7 +128,7 @@ function MonogramButton({ initials, color, ariaLabel, title, href, onClick, coun
     display: "inline-flex", alignItems: "center", justifyContent: "center",
     width: size, height: size, borderRadius: "50%",
     fontFamily: FONT_MONO,
-    fontSize: initials.length > 1 ? 11 : 13,
+    fontSize: initials && initials.length > 1 ? 11 : 13,
     fontWeight: 700, letterSpacing: 0.4,
     color: color,
     background: glow ? `${color}22` : "transparent",
@@ -137,7 +145,7 @@ function MonogramButton({ initials, color, ariaLabel, title, href, onClick, coun
   };
   const inner = (
     <>
-      <span style={{ pointerEvents: "none" }}>{initials}</span>
+      <span style={{ pointerEvents: "none", display: "inline-flex", alignItems: "center" }}>{glyph || initials}</span>
       {count > 0 && (
         <span aria-hidden="true" style={{
           position: "absolute", top: -3, right: -3,
@@ -726,7 +734,7 @@ function ProspectCard({ m, notes, setNotes, index, qualStatus, setQualStatus }) 
               );
             })()}
             {m.phone && (
-              <MonogramButton initials="PH" color={C.cyan}
+              <MonogramButton glyph={<PhoneIcon />} color={C.cyan}
                 href={`tel:${m.phone}`}
                 ariaLabel="Call prospect"
                 title={`Call ${m.phone}`} />

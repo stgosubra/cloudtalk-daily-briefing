@@ -24,7 +24,8 @@ import { OWNER } from "../../config.js";
 import {
   Page, SectionLabel, Stat, StatRow, StatusDot, DataList, DataRow, Empty,
 } from "../../design/ui.jsx";
-import { C, R, T, TRACK, SEMANTIC, LEVEL_ORDER, FONT_SANS, FONT_MONO } from "../../lib/tokens.js";
+import { Gauge, CountUp, Sparkline } from "../../design/viz.jsx";
+import { C, R, T, TRACK, NUM, SEMANTIC, LEVEL_ORDER, FONT_SANS, FONT_MONO } from "../../lib/tokens.js";
 
 // ---------------------------------------------------------------------------
 // icons
@@ -349,6 +350,26 @@ export default function DashboardModule({ onNavigate }) {
   const pacing = PERFORMANCE?.pacing ?? {};
   const acceptedAmt = sum((DEALS?.deals ?? []).filter((d) => d.outcome === "accepted"), (d) => d.amt);
 
+  // The hero dial. Level tracks pace rather than raw attainment - the same
+  // discipline as module 04, and for the same reason: 40% on day 4 is fine.
+  const month = useMemo(() => {
+    const { target = 0, earned = 0, dayOfMonth = 0, daysInMonth = 0 } = pacing;
+    const pct = target > 0 ? (earned / target) * 100 : 0;
+    const elapsed = daysInMonth > 0 ? dayOfMonth / daysInMonth : 0;
+    const expectedPct = elapsed * 100;
+    const ratio = expectedPct > 0 ? pct / expectedPct : null;
+    const level = ratio == null ? "idle" : ratio >= 1 ? "ok" : ratio >= 0.8 ? "warn" : "risk";
+    const short = Math.max(0, Math.ceil(target * elapsed - earned));
+    const verdict = target === 0
+      ? "No quota set for this month."
+      : ratio >= 1
+        ? `${earned} of ${target} points with ${daysInMonth - dayOfMonth} days left - ahead of pace.`
+        : `${earned} of ${target} points on day ${dayOfMonth} of ${daysInMonth}. ${short} behind where the month should be.`;
+    return { pct, expectedPct, level, verdict };
+  }, [pacing]);
+
+  const monthTrend = useMemo(() => (PERFORMANCE?.points ?? []).map((m) => m.points), []);
+
   // The Today tile's signal is derived live rather than carried in the registry,
   // so it can never disagree with what module 02 actually shows.
   const tiles = useMemo(() => TILE_MODULES.map((m) => {
@@ -362,15 +383,43 @@ export default function DashboardModule({ onNavigate }) {
 
   return (
     <Page>
-      <div style={{ marginBottom: 28 }}>
-        <SectionLabel>{today}</SectionLabel>
-        <h1 style={{
-          font: `600 34px/1.1 ${FONT_SANS}`,
-          letterSpacing: TRACK.tightest, color: C.text,
-          margin: "12px 0 0",
-        }}>
-          {greeting()}, {OWNER.name.split(" ")[0]}.
-        </h1>
+      {/* The landing slot opens on the one number the month is judged by, not on
+          a menu. The dial carries the verdict, the sparkline carries the shape
+          of the year it sits in, and the sentence underneath says it in words so
+          nobody has to read a dial to get the answer. */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: 28, marginBottom: 28,
+      }}>
+        <div style={{ minWidth: 0 }}>
+          <SectionLabel>{today}</SectionLabel>
+          <h1 style={{
+            font: `600 34px/1.1 ${FONT_SANS}`,
+            letterSpacing: TRACK.tightest, color: C.text,
+            margin: "12px 0 0",
+          }}>
+            {greeting()}, {OWNER.name.split(" ")[0]}.
+          </h1>
+          <div style={{ font: `400 ${T.bodyLg}px/1.5 ${FONT_SANS}`, color: C.textMuted, marginTop: 12, maxWidth: 560 }}>
+            {month.verdict}
+          </div>
+          {monthTrend.length > 1 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>
+              <Sparkline points={monthTrend} color={C.bloom} width={170} height={30} delay={260} />
+              <span style={{ font: `400 ${T.label}px/1 ${FONT_MONO}`, color: C.textFaint, letterSpacing: TRACK.label }}>
+                POINTS / MONTH
+              </span>
+            </div>
+          )}
+        </div>
+        <Gauge pct={month.pct} level={month.level} size={184} thickness={14} markerPct={month.expectedPct}>
+          <div style={{ font: `600 ${T.hero}px/1 ${FONT_SANS}`, color: SEMANTIC[month.level].fill, letterSpacing: TRACK.tightest, ...NUM }}>
+            <CountUp value={month.pct} duration={1100} format={(v) => `${Math.round(v)}%`} />
+          </div>
+          <div style={{ font: `400 ${T.label}px/1 ${FONT_MONO}`, color: C.textFaint, letterSpacing: TRACK.label, marginTop: 9 }}>
+            OF QUOTA
+          </div>
+        </Gauge>
       </div>
 
       <StatRow>

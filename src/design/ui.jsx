@@ -58,9 +58,12 @@ export function Card({ title, label, right, pad = 18, children, style, onClick }
           border: `1px solid ${hover && onClick ? C.borderStrong : C.border}`,
           borderRadius: R.xl,
           padding: pad,
-          boxShadow: SHADOW.card,
+          boxShadow: hover && onClick ? SHADOW.cardHover : SHADOW.card,
           cursor: onClick ? "pointer" : undefined,
-          transition: "background 120ms ease, border-color 120ms ease",
+          // Interactive cards lift; static cards stay put. The transform settles
+          // to `none` for the same containing-block reason as Reveal.
+          transform: hover && onClick ? "translateY(-2px)" : "none",
+          transition: "background 120ms ease, border-color 120ms ease, box-shadow 180ms ease, transform 180ms cubic-bezier(0.22,1,0.36,1)",
           minWidth: 0,
           ...style,
         }}
@@ -428,6 +431,9 @@ export function AreaChart({
 }) {
   const [hoverIdx, setHoverIdx] = useState(null);
   const [gid] = useState(() => `ac${++chartSeq}`);
+  // Draw-on, same dash trick as Sparkline: the line sweeps left to right once,
+  // the area and reference overlays fade up behind it.
+  const draw = useMountProgress(1000);
   const stroke = color || C.emerald;
 
   const W = 640, H = height;
@@ -479,14 +485,15 @@ export function AreaChart({
             stroke={r.color || C.textFaint}
             strokeWidth="1.5"
             strokeDasharray={r.dash || "4 5"}
-            opacity={r.opacity ?? 1}
+            opacity={(r.opacity ?? 1) * draw}
           />
         ))}
 
-        {areaPath && <path d={areaPath} fill={`url(#${gid})`} />}
+        {areaPath && <path d={areaPath} fill={`url(#${gid})`} opacity={draw} />}
         {linePath && (
           <path d={linePath} fill="none" stroke={stroke} strokeWidth="2.25"
-                strokeLinecap="round" strokeLinejoin="round" />
+                strokeLinecap="round" strokeLinejoin="round"
+                pathLength="1" strokeDasharray="1" strokeDashoffset={1 - draw} />
         )}
 
         {hp && (

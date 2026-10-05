@@ -5,7 +5,7 @@ import {
   Page, PageHeader, Card, SectionLabel, Stat, StatRow, StatusDot,
   AreaChart,
 } from "../../design/ui.jsx";
-import { Gauge, FunnelFlow, CountUp, Sparkline } from "../../design/viz.jsx";
+import { Gauge, FunnelFlow, CountUp, Sparkline, useMountProgress } from "../../design/viz.jsx";
 import { C, R, T, TRACK, NUM, SEMANTIC, FONT_SANS, FONT_MONO } from "../../lib/tokens.js";
 
 // Module 04 - Performance. One question: am I going to hit quota this month,
@@ -103,6 +103,9 @@ const SEG = [
 ];
 
 function SegmentBars({ months }) {
+  // Bars grow from the baseline once on mount - same clock as every other
+  // draw-in, so the card animates as one piece.
+  const p = useMountProgress(900);
   const totals = months.map((m) => SEG.reduce((a, s) => a + (m.sqo[s.key]?.value || 0), 0));
   const max = Math.max(...totals, 1);
   return (
@@ -116,7 +119,7 @@ function SegmentBars({ months }) {
           >
             <div style={{
               display: "flex", flexDirection: "column-reverse",
-              height: `${Math.max((totals[i] / max) * 100, totals[i] > 0 ? 2 : 0)}%`,
+              height: `${Math.max((totals[i] / max) * 100, totals[i] > 0 ? 2 : 0) * p}%`,
               borderRadius: 3, overflow: "hidden",
             }}>
               {SEG.map((s) => {

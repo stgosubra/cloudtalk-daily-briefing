@@ -216,10 +216,18 @@ function LadderItem({ alert, rank, onNavigate }) {
         borderRadius: R.lg,
         padding: "15px 16px",
         color: C.text, font: `400 ${T.body}px/1.4 ${FONT_SANS}`,
-        transition: "border-color 120ms ease",
+        transform: "none",
+        transition: "border-color 120ms ease, transform 180ms cubic-bezier(0.22,1,0.36,1)",
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = s.fill; }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = s.border; }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = s.fill;
+        e.currentTarget.style.transform = "translateY(-2px)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = s.border;
+        e.currentTarget.style.transform = "none";
+      }}
+      onMouseDown={(e) => { e.currentTarget.style.transform = "none"; }}
     >
       <span style={{
         font: `500 ${T.label}px/1 ${FONT_MONO}`, color: s.fill,
@@ -263,16 +271,22 @@ function Tile({ tile, onNavigate }) {
         padding: 16,
         color: C.text, fontFamily: FONT_SANS,
         display: "flex", flexDirection: "column", gap: 12,
-        transition: "background 120ms ease, border-color 120ms ease",
+        transform: "none",
+        transition: "background 120ms ease, border-color 120ms ease, transform 180ms cubic-bezier(0.22,1,0.36,1), box-shadow 180ms ease",
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.background = C.cardBgHover;
         e.currentTarget.style.borderColor = `${accent}4D`;
+        e.currentTarget.style.transform = "translateY(-2px)";
+        e.currentTarget.style.boxShadow = `0 14px 36px -16px rgba(0,0,0,0.7), 0 0 0 1px ${accent}1A`;
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.background = C.cardBg;
         e.currentTarget.style.borderColor = C.border;
+        e.currentTarget.style.transform = "none";
+        e.currentTarget.style.boxShadow = "none";
       }}
+      onMouseDown={(e) => { e.currentTarget.style.transform = "none"; }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{

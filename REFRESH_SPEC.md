@@ -162,7 +162,7 @@ File: `src/modules/performance/data.js`. Single export `PERFORMANCE`. All counts
 
 - **SQL** = deals the operator created: `deal_creator__sdr_only_` = `<ownerId>`, bucketed by deal `createdate`.
 - **SQO** = SQLs accepted by an AE: + `deal_accepted_by_ae` = true.
-- **Rejected** = `deal_accepted_by_ae` = No, bucketed by `rejected_deal_timestamp`.
+- **Rejected** = `deal_accepted_by_ae` = `false` (string literal, not `No`), bucketed by `rejected_deal_timestamp`.
 - **Points** = `deal_sdr_points_number` (seats_points + va_point). 90 pts/month = 100% = EUR 1,933.33; 1 pt = EUR 21.48. Quota was raised from 80 to 90 on 2026-07-22 - `scripts/gen-performance.mjs` and `performance/data.js` already carry 90; do not reintroduce 80. Credited in the month the deal is **accepted** (`accepted_deal__date_time_`), not created.
 - **AI deal** = `va_point` >= 1.
 - **Seat tier** (`discovery_call__seats`): micro 1-10, senior_micro 11-20, smb 21-50, mm 51-100, enterprise 101+.

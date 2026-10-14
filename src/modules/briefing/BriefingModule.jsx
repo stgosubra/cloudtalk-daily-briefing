@@ -17,6 +17,8 @@ import {
 const FIRST_NAME = OWNER.name.split(" ")[0];
 
 
+const ensureProto = (u) => (u && !/^https?:\/\//i.test(u) ? `https://${u}` : u);
+
 const WORK_START = 9 * 60;
 const WORK_END = 18 * 60;
 const MIN_SLOT = 15;
@@ -157,7 +159,8 @@ function MonogramButton({ initials, glyph, color, ariaLabel, title, href, onClic
   const baseStyle = {
     position: "relative",
     display: "inline-flex", alignItems: "center", justifyContent: "center",
-    width: size, height: size, borderRadius: "50%",
+    width: size, height: size, minWidth: size, borderRadius: "50%",
+    flexShrink: 0,
     fontFamily: FONT_MONO,
     fontSize: initials && initials.length > 1 ? 11 : 13,
     fontWeight: 700, letterSpacing: 0.4,
@@ -559,8 +562,8 @@ function HSPanel({ p, notes, setNotes }) {
         <div style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textMuted, marginTop: 3 }}>{p.company || "-"}</div>
         {p.companyUrl && (
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2, flexWrap: "wrap" }}>
-            <a href={p.companyUrl} target="_blank" rel="noreferrer" style={{ fontFamily: FONT_MONO, fontSize: 9, color: C.blue, textDecoration: "none" }}>
-              {p.companyUrl.replace("https://www.", "")} ↗
+            <a href={ensureProto(p.companyUrl)} target="_blank" rel="noreferrer" style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.blue, textDecoration: "none", background: C.blueBg || "rgba(56,132,244,0.08)", padding: "1px 7px", borderRadius: 10, border: `1px solid ${C.blueBorder || "rgba(56,132,244,0.18)"}`, lineHeight: 1.4, display: "inline-flex", alignItems: "center", gap: 3 }}>
+              <span style={{ fontSize: 11 }}>🌐</span> {p.companyUrl.replace(/^https?:\/\/(www\.)?/, "")} ↗
             </a>
             <button
               onClick={() => setBriefOpen((o) => !o)}
@@ -724,7 +727,7 @@ function ProspectCard({ m, notes, setNotes, index, qualStatus, setQualStatus }) 
             <div style={{ marginBottom: 6 }}>
               {m.companyUrl ? (
                 <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textMuted }}>
-                  web: <a href={m.companyUrl} target="_blank" rel="noreferrer" style={{ color: C.textMid, textDecoration: "underline" }}>{m.companyUrl.replace("https://www.", "")}</a>
+                  web: <a href={ensureProto(m.companyUrl)} target="_blank" rel="noreferrer" style={{ color: C.blue, textDecoration: "none", background: C.blueBg || "rgba(56,132,244,0.08)", padding: "0px 5px", borderRadius: 8, border: `1px solid ${C.blueBorder || "rgba(56,132,244,0.18)"}` }}>{m.companyUrl.replace(/^https?:\/\/(www\.)?/, "")} ↗</a>
                 </span>
               ) : (
                 <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: C.textHint }}>{m.company}</span>

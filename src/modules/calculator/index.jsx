@@ -1,28 +1,21 @@
 import { useState, useEffect } from "react";
 import MinutesCalc from "./MinutesCalc.jsx";
 import CostCalc from "./CostCalc.jsx";
-import NumbersFinder from "./NumbersFinder.jsx";
 import { TabBar } from "../../design/ui.jsx";
 import { C, T, TRACK, FONT_SANS, FONT_MONO } from "../../lib/tokens.js";
 
-// Module 03 - Calculator hub. Three tabs over the shared canvas:
+// Module 03 - Calculator hub. Two tabs over the shared canvas:
 //   Minutes  - per-user calling time estimator
 //   PAYG     - pay-as-you-go cost / quote estimator
-//   Numbers  - country number finder (compliance, voice, pricing)
-//
-// Unlike every other module these are interactive tools rather than
-// read-outs, so they keep their own internal layout and own their scroll. The
-// hub only supplies the chrome: same canvas, same header grammar, same tabs.
 const TABS = [
   { id: "minutes", label: "Minutes" },
   { id: "cost", label: "PAYG" },
-  { id: "numbers", label: "Numbers" },
 ];
 
 export default function CalculatorModule({ intent }) {
-  const [tab, setTab] = useState(intent?.tab === "cost" ? "cost" : intent?.tab === "numbers" ? "numbers" : "minutes");
+  const [tab, setTab] = useState(intent?.tab === "cost" ? "cost" : "minutes");
   useEffect(() => {
-    if (intent?.tab && ["minutes", "cost", "numbers"].includes(intent.tab)) setTab(intent.tab);
+    if (intent?.tab && ["minutes", "cost"].includes(intent.tab)) setTab(intent.tab);
   }, [intent]);
 
   return (
@@ -50,7 +43,7 @@ export default function CalculatorModule({ intent }) {
         <TabBar tabs={TABS} value={tab} onChange={setTab} size="sm" cycleShortcut />
       </div>
       <div style={{ flex: 1, minHeight: 0 }}>
-        {tab === "minutes" ? <MinutesCalc /> : tab === "cost" ? <CostCalc /> : <NumbersFinder />}
+        {tab === "minutes" ? <MinutesCalc /> : <CostCalc />}
       </div>
     </div>
   );

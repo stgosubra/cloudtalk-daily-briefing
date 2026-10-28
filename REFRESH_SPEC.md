@@ -123,6 +123,8 @@ For every prospect card - not just newly-enriched ones - run Lusha: `contacts_se
 
 Feed Lusha firmographics into `qualifierQuestions` and `companyBrief` where it sharpens discovery - e.g. a large multinational contact should get a scope/authority-check question (is this team-scoped or enterprise-wide?), a small team gets different questions than a 10,000+ employee company.
 
+**Known limitation (2026-10-28): no Lusha MCP tool exists in this environment.** There is no `contacts_search`, `companies_search`, or any Lusha-prefixed tool in the available MCP connectors. Until a Lusha MCP server is provisioned, every card will have `lusha: null`. This is an infrastructure constraint, not a per-run transient failure, so it must NOT be declared as a per-card dataGap on every run. Instead: set `lusha: null` silently and note "Lusha enrichment unavailable (no MCP connector)" once in the module-level prose or run report, not per card. The `companyBrief` may mention the absence when it materially affects qualification, but the `dataGaps` array on each card should not carry a Lusha entry - it creates noise that drowns real gaps.
+
 ### Output shape
 
 Prospect card:
@@ -166,7 +168,7 @@ File: `src/modules/performance/data.js`. Single export `PERFORMANCE`. All counts
 - **Points** = `deal_sdr_points_number` (seats_points + va_point). 90 pts/month = 100% = EUR 1,933.33; 1 pt = EUR 21.48. Quota was raised from 80 to 90 on 2026-07-22 - `scripts/gen-performance.mjs` and `performance/data.js` already carry 90; do not reintroduce 80. Credited in the month the deal is **accepted** (`accepted_deal__date_time_`), not created.
 - **AI deal** = `va_point` >= 1.
 - **Seat tier** (`discovery_call__seats`): micro 1-10, senior_micro 11-20, smb 21-50, mm 51-100, enterprise 101+.
-- **MRR segment** (`amount__products_recurring`): micro <= 500, smb 500-1500, midmarket >= 1500.
+- **MRR segment** (`amount__products_recurring`): micro <= 500, smb 500-1500, midmarket >= 1500. **Query by BETWEEN filter per tier, not GROUP BY** - see the segment query pattern below.
 - **Won** = dealstage 6607659 (Won / Implementation - Inbound Pipeline).
 - **Value** = `SUM(amount_in_home_currency)` (EUR). **Geo** = deal-level `country`.
 
@@ -195,6 +197,46 @@ GROUP BY country, m
 ```
 
 (Aliases are not supported - express the month bucket inline per the live tool's accepted syntax.) Repeat with `+ deal_accepted_by_ae = true` for SQO and the rejected filter for Rejected. MQL is a contact-level count by `country`.
+
+### Segment query pattern (segmentSplit + segmentMonthly)
+
+**Do not GROUP BY `amount__products_recurring`.** That produces one row per distinct amount value, which exceeds HubSpot's dataset row limit and causes the query to fail or return truncated results. This is a recurring failure - the "segmentSplit carried forward" dataGap.
+
+Instead, run one query per tier per stage, using BETWEEN to bucket by amount range. Six queries for segmentSplit (3 tiers x 2 stages) plus six for segmentMonthly (same, with DATE_TRUNC month added). All twelve can run in the same parallel batch since they have no interdependencies.
+
+**SQL micro (amount <= 500):**
+```
+SELECT DATE_TRUNC('month', createdate), COUNT(*), SUM(amount_in_home_currency)
+FROM deals
+WHERE deal_creator__sdr_only_ = <ownerId>
+  AND createdate BETWEEN <window_start> AND <window_end>
+  AND amount__products_recurring BETWEEN 0 AND 500
+GROUP BY DATE_TRUNC('month', createdate)
+```
+
+**SQL smb (amount 500-1500):**
+```
+SELECT DATE_TRUNC('month', createdate), COUNT(*), SUM(amount_in_home_currency)
+FROM deals
+WHERE deal_creator__sdr_only_ = <ownerId>
+  AND createdate BETWEEN <window_start> AND <window_end>
+  AND amount__products_recurring BETWEEN 500.01 AND 1500
+GROUP BY DATE_TRUNC('month', createdate)
+```
+
+**SQL midmarket (amount >= 1500):**
+```
+SELECT DATE_TRUNC('month', createdate), COUNT(*), SUM(amount_in_home_currency)
+FROM deals
+WHERE deal_creator__sdr_only_ = <ownerId>
+  AND createdate BETWEEN <window_start> AND <window_end>
+  AND amount__products_recurring >= 1500
+GROUP BY DATE_TRUNC('month', createdate)
+```
+
+Repeat each with `+ deal_accepted_by_ae = 'true'` and `accepted_deal__date_time_` as the date dimension for SQO. The `segmentSplit` YTD totals are the sum across all months from each query. `segmentMonthly` is the per-month breakdown directly.
+
+For deals where `amount__products_recurring` is null: these are excluded from all three tiers and are not counted in the segment breakdown. This is intentional - a deal with no recurring amount has no MRR tier.
 
 ---
 

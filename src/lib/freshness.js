@@ -72,6 +72,17 @@ export function declaredGaps() {
       text: `MQL YTD is ${d > 0 ? `${d} above` : `${Math.abs(d)} below`} the sum of its monthly buckets (independent COUNTs, expected drift)`,
     });
   }
+
+  // Module 05 and 07 gaps - surface them in the shell banner alongside 04's.
+  const ss = selfservedData.SELFSERVED;
+  for (const g of ss?.dataGaps ?? []) {
+    out.push({ num: "05", label: "Self-Served", text: g });
+  }
+  const deals = dealsData.DEALS;
+  for (const g of deals?.dataGaps ?? []) {
+    out.push({ num: "07", label: "Pipeline", text: g });
+  }
+
   return out;
 }
 
